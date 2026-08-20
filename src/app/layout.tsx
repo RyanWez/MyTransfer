@@ -1,22 +1,38 @@
 import type { Metadata } from "next";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
+import Shell from "@/components/Shell";
+import Toasts from "@/components/Toasts";
+
+// Plex was drawn for technical systems and its sans and mono were designed
+// together — the figures line up between a label and the number beside it.
+const sans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "MyShare Dashboard",
-  description: "Mytel balance transfer management",
+  title: "MyShare · Mytel transfer console",
+  description: "Send Mytel balance between SIMs and keep the log.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body className="min-h-screen">
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1 p-6 md:p-8 overflow-x-auto">{children}</main>
-        </div>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+      <body className="min-h-screen antialiased">
+        <Shell>{children}</Shell>
+        <Toasts />
       </body>
     </html>
   );
