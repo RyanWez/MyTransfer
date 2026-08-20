@@ -50,7 +50,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-5xl space-y-8">
+    <div className="max-w-5xl mx-auto space-y-8">
       {/* The one number the operator opens this page for. */}
       <section className="animate-rise-in">
         <Eyebrow>Total available</Eyebrow>

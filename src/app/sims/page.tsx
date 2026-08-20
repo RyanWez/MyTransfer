@@ -197,7 +197,7 @@ export default function SimsPage() {
   const canSubmit = mode === "otp" ? otp.length === 6 : password.length > 0;
 
   return (
-    <div className="space-y-5">
+    <div className="max-w-6xl mx-auto space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
           {searchQuery.trim() ? (

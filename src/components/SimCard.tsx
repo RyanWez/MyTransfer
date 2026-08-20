@@ -157,8 +157,8 @@ function SimChip({ sim, selected, onSelect }: SimChipProps) {
       disabled={!active}
       onClick={() => onSelect(sim)}
       aria-pressed={selected}
-      contentClassName={cn("px-3.5 py-3", !active && "bg-substrate")}
-      className="w-full sm:w-auto"
+      contentClassName={cn("px-3.5 py-3 text-left", !active && "bg-substrate")}
+      className="w-full text-left"
     >
       <div className="flex items-center gap-2">
         <StatusDot tone={active ? "signal" : "muted"} size="sm" pulse={active} />

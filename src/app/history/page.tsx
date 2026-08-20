@@ -62,7 +62,7 @@ export default function HistoryPage() {
   }, [shown]);
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className="max-w-4xl mx-auto space-y-5">
       <div className="flex items-center justify-between gap-4">
         <span className="whitespace-nowrap font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
           {shown.length} of {rows.length} {rows.length === 1 ? "attempt" : "attempts"}

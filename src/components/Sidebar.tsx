@@ -54,7 +54,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-ink text-substrate transition-transform duration-200 md:static md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-ink text-substrate transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -74,7 +74,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           </button>
         </div>
 
-        <nav className="flex-1 py-3">
+        <nav className="flex-1 overflow-y-auto py-3">
           {items.map((it) => {
             const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
             const Icon = it.icon;

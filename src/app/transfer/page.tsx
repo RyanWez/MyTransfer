@@ -209,7 +209,7 @@ export default function TransferPage() {
 
   if (stage === "done" && receipt) {
     return (
-      <div className="max-w-md animate-rise-in">
+      <div className="max-w-md mx-auto animate-rise-in">
         <Panel contentClassName="p-5">
           <div className="flex items-center gap-2">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-signal">
@@ -249,7 +249,7 @@ export default function TransferPage() {
   const locked = stage === "otp";
 
   return (
-    <div className="max-w-2xl space-y-7">
+    <div className="max-w-4xl mx-auto space-y-7">
       <Stepper steps={STEPS} current={stage === "otp" ? 1 : 0} className="max-w-sm" />
 
       {/* Sender */}
@@ -263,7 +263,7 @@ export default function TransferPage() {
               </span>
             )}
           </div>
-          <div className="relative w-44 sm:w-56">
+          <div className="relative w-44 sm:w-60">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
             <input
               type="text"
@@ -286,9 +286,9 @@ export default function TransferPage() {
           </div>
         </div>
 
-        <div className="mt-2.5 flex flex-wrap gap-2.5">
+        <div className="mt-2.5">
           {displayedSims.length === 0 ? (
-            <div className="w-full rounded border border-hairline bg-card p-4 text-center">
+            <div className="w-full rounded border border-hairline bg-card p-6 text-center">
               <p className="text-xs text-ink-mute">
                 No SIM found matching &quot;{searchQuery}&quot;
               </p>
@@ -301,14 +301,16 @@ export default function TransferPage() {
               </button>
             </div>
           ) : (
-            displayedSims.map((s) => (
-              <SimChip
-                key={s.phone}
-                sim={s}
-                selected={s.phone === sender}
-                onSelect={(sim) => !locked && setSender(sim.phone)}
-              />
-            ))
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {displayedSims.map((s) => (
+                <SimChip
+                  key={s.phone}
+                  sim={s}
+                  selected={s.phone === sender}
+                  onSelect={(sim) => !locked && setSender(sim.phone)}
+                />
+              ))}
+            </div>
           )}
         </div>
       </section>
