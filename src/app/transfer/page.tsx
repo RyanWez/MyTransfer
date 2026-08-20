@@ -368,7 +368,7 @@ export default function TransferPage() {
           </Receipt>
           {short && (
             <p className="mt-2 text-xs text-alert-deep">
-              That's more than the last balance read for {fmtPhoneGrouped(sender)}. Read the balance
+              That&apos;s more than the last balance read for {fmtPhoneGrouped(sender)}. Read the balance
               again from the SIM tray, or send less.
             </p>
           )}

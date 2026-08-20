@@ -68,7 +68,7 @@ export default function DashboardPage() {
   const hourly = data
     ? data.series.granularity === "hour"
     : (range.to - range.from) / 86400 <= 1.001;
-  const buckets = data?.series.buckets ?? [];
+  const buckets = useMemo(() => data?.series.buckets ?? [], [data?.series.buckets]);
 
   const axis = useMemo(() => {
     const ticks: string[] = [];
