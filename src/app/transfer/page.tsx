@@ -60,7 +60,7 @@ export default function TransferPage() {
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
-  }, []);
+  }, [setSender]);
 
   useEffect(() => {
     loadSims();

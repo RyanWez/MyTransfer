@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -43,6 +43,74 @@ function getPaginationRange(current: number, total: number): (number | "...")[] 
     return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
   }
   return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
+function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
+  const [offset, setOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startX = useRef(0);
+  const currentX = useRef(0);
+  const ACTION_WIDTH = 84;
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    setIsDragging(true);
+    startX.current = e.clientX;
+    currentX.current = offset;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!isDragging) return;
+    const diff = e.clientX - startX.current;
+    let newOffset = currentX.current + diff;
+    if (newOffset > 0) newOffset = 0;
+    if (newOffset < -ACTION_WIDTH * 1.5) newOffset = -ACTION_WIDTH * 1.5;
+    setOffset(newOffset);
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!isDragging) return;
+    setIsDragging(false);
+    if (offset < -ACTION_WIDTH / 2) {
+      setOffset(-ACTION_WIDTH);
+    } else {
+      setOffset(0);
+    }
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
+  return (
+    <div className="relative overflow-hidden w-full group border-0 p-0 m-0">
+      <div className="absolute inset-y-0 right-0 w-[84px] flex">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setOffset(0);
+            onDelete();
+          }}
+          className="w-full bg-alert text-white flex flex-col items-center justify-center transition-colors hover:bg-alert-deep focus:outline-none"
+          title="Delete record"
+        >
+          <Trash2 className="h-5 w-5 mb-1" />
+          <span className="text-[10px] font-mono uppercase">Delete</span>
+        </button>
+      </div>
+      <div
+        className="w-full bg-card z-10 relative px-4 py-3 touch-pan-y transition-colors group-hover:bg-substrate select-none"
+        style={{
+          transform: `translate3d(${offset}px, 0, 0)`,
+          transition: isDragging ? "none" : "transform 0.2s cubic-bezier(0.32, 0.72, 0, 1)",
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function HistoryPage() {
@@ -269,57 +337,46 @@ export default function HistoryPage() {
                 const reason =
                   t.message ?? (t.error_code !== null ? `Error ${t.error_code}` : null);
                 return (
-                  <li key={t.id} className="relative group p-0 m-0 border-0 bg-card overflow-hidden">
-                    <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-none">
-                      <div className="w-full shrink-0 snap-start bg-card transition-colors group-hover:bg-substrate px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <StatusDot tone={badge.tone} size="sm" />
-                          <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
-                            {fmtClock(t.created_at)}
-                          </span>
+                  <li key={t.id} className="p-0 m-0 border-0 bg-card">
+                    <SwipeableRow onDelete={() => setDeleteId(t.id)}>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <StatusDot tone={badge.tone} size="sm" />
+                        <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
+                          {fmtClock(t.created_at)}
+                        </span>
 
-                          {/* Narrow screens reorder to two lines — clock and money on the
-                              first, the phone pair on the second — so amounts stay in a
-                              single right-hand column instead of each row growing a third line. */}
-                          <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
-                            <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
-                            <ArrowRight
-                              className="h-3 w-3 shrink-0 text-brass"
-                              strokeWidth={2}
-                              aria-hidden="true"
-                            />
-                            <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
-                          </span>
+                        {/* Narrow screens reorder to two lines — clock and money on the
+                            first, the phone pair on the second — so amounts stay in a
+                            single right-hand column instead of each row growing a third line. */}
+                        <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
+                          <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
+                          <ArrowRight
+                            className="h-3 w-3 shrink-0 text-brass"
+                            strokeWidth={2}
+                            aria-hidden="true"
+                          />
+                          <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
+                        </span>
 
-                          <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
-                            <span className="font-mono text-sm tnum text-brass-deep">
-                              {fmtAmount(t.amount)}
-                            </span>
-                            <span className="ml-2 font-mono text-xs tnum text-ink-faint">
-                              +{fmtAmount(t.fee)} fee
-                            </span>
+                        <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
+                          <span className="font-mono text-sm tnum text-brass-deep">
+                            {fmtAmount(t.amount)}
                           </span>
-                        </div>
-
-                        {failed && reason && (
-                          <div className="mt-1.5 pl-[18px] text-xs text-alert-deep">{reason}</div>
-                        )}
-                        {!failed && t.status !== "success" && (
-                          <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">
-                            {badge.label}
-                          </div>
-                        )}
+                          <span className="ml-2 font-mono text-xs tnum text-ink-faint">
+                            +{fmtAmount(t.fee)} fee
+                          </span>
+                        </span>
                       </div>
-                      
-                      <button
-                        onClick={() => setDeleteId(t.id)}
-                        className="w-[84px] shrink-0 snap-end bg-alert text-white flex flex-col items-center justify-center transition-colors hover:bg-alert-deep focus:outline-none"
-                        title="Delete record"
-                      >
-                        <Trash2 className="h-5 w-5 mb-1" />
-                        <span className="text-[10px] font-mono uppercase">Delete</span>
-                      </button>
-                    </div>
+
+                      {failed && reason && (
+                        <div className="mt-1.5 pl-[18px] text-xs text-alert-deep">{reason}</div>
+                      )}
+                      {!failed && t.status !== "success" && (
+                        <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">
+                          {badge.label}
+                        </div>
+                      )}
+                    </SwipeableRow>
                   </li>
                 );
               })}
