@@ -15,6 +15,7 @@ import { Stepper } from "@/components/Stepper";
 import { Receipt, ReceiptRow, ReceiptDivider } from "@/components/Receipt";
 import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
+import { useNowSec } from "@/lib/useNowSec";
 import type { Sim } from "@/lib/types";
 
 const QUICK = [500, 800, 1000, 5000];
@@ -43,7 +44,9 @@ export default function TransferPage() {
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState<Snapshot | null>(null);
   const [resendAt, setResendAt] = useState(0);
-  const [cooldown, setCooldown] = useState(0);
+
+  const nowSec = useNowSec();
+  const cooldown = resendAt > 0 ? Math.max(0, resendAt - nowSec) : 0;
 
   const loadSims = useCallback(() => {
     return fetchSims()
@@ -61,15 +64,6 @@ export default function TransferPage() {
   useEffect(() => {
     loadSims();
   }, [loadSims]);
-
-  // Resend cooldown — an OTP request costs an SMS, so don't invite double-taps.
-  useEffect(() => {
-    if (!resendAt) return;
-    const tick = () => setCooldown(Math.max(0, resendAt - Math.floor(Date.now() / 1000)));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [resendAt]);
 
   const selected = sims.find((s) => s.phone === sender);
   const senderBalance = selected?.balance ?? null;
@@ -185,7 +179,6 @@ export default function TransferPage() {
     setReceiver("");
     setReceipt(null);
     setResendAt(0);
-    setCooldown(0);
     setSearchQuery("");
   }
 

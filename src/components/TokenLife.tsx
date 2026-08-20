@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { fmtCountdown, fmtShortDate, fmtStamp } from "@/lib/format";
+import { useNowSec } from "@/lib/useNowSec";
 
 const HOUR = 3600;
 const DAY = 86400;
@@ -30,29 +31,12 @@ export interface TokenLifeProps {
 
 /**
  * Four brass contact pads that deplete as the access token ages, with the time
- * left beside them. Token state is otherwise invisible until an action fails.
- *
- * Past zero this does NOT claim the SIM is logged out — lib/tokens.ts refreshes
- * transparently via the refresh token on the next call.
+ * left beside them. Uses a synchronized global ticker so all SIM cards update together
+ * in a single React render pass without scattered per-component timers.
  */
 function TokenLife({ expiresAt, className }: TokenLifeProps) {
-  const [remaining, setRemaining] = React.useState<number | null>(null);
-
-  React.useEffect(() => {
-    if (!expiresAt) {
-      setRemaining(null);
-      return;
-    }
-    let id = 0;
-    const tick = () => {
-      const left = expiresAt - Math.floor(Date.now() / 1000);
-      setRemaining(left);
-      // Only a sub-hour token earns a per-second clock.
-      id = window.setTimeout(tick, left > HOUR ? 30_000 : 1_000);
-    };
-    tick();
-    return () => window.clearTimeout(id);
-  }, [expiresAt]);
+  const now = useNowSec();
+  const remaining = expiresAt ? expiresAt - now : null;
 
   if (remaining === null) {
     return (
