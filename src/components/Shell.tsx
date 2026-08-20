@@ -7,11 +7,17 @@ import TopBar from "@/components/TopBar";
 /** Holds the mobile drawer state shared by the rail and the top bar. */
 export default function Shell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [collapsed, setCollapsed] = React.useState(false);
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <Sidebar 
+        open={menuOpen} 
+        onClose={() => setMenuOpen(false)} 
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed(!collapsed)}
+      />
+      <div className="flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out">
         <TopBar onMenu={() => setMenuOpen(true)} />
         <main className="flex-1 px-5 py-6 md:px-8 md:py-8">{children}</main>
       </div>

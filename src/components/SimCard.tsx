@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCw, Trash2, LogIn } from "lucide-react";
+import { RefreshCw, Trash2, LogIn, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Panel } from "@/components/ui/Panel";
 import { StatusDot } from "@/components/ui/StatusDot";
@@ -39,8 +39,17 @@ function SimCard({
   const atLimit = sim.sent_today >= DAILY_LIMIT_PER_SIM;
 
   return (
-    <Panel className={className} style={style} contentClassName="flex h-full flex-col p-4">
-      <div className="flex items-center justify-between gap-3">
+    <Panel 
+      className={cn("group transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg", className)} 
+      style={style} 
+      contentClassName="relative flex h-full flex-col p-5 bg-gradient-to-br from-card to-substrate overflow-hidden"
+    >
+      {/* Decorative Gold Chip */}
+      <div className="absolute right-4 top-14 opacity-20 transition-opacity duration-300 group-hover:opacity-40 pointer-events-none">
+        <Cpu className="h-10 w-10 text-brass-deep" strokeWidth={1} />
+      </div>
+
+      <div className="relative z-10 flex items-center justify-between gap-3">
         <span className="flex items-center gap-2">
           <StatusDot tone={state.tone} pulse={active} />
           <span className="font-mono text-eyebrow font-semibold uppercase text-ink-soft">
@@ -71,9 +80,9 @@ function SimCard({
         {sim.balance_checked_at ? `Read ${fmtTime(sim.balance_checked_at)}` : "Balance not read yet"}
       </div>
 
-      {sim.note && <div className="mt-2 text-xs italic text-ink-mute">{sim.note}</div>}
+      {sim.note && <div className="relative z-10 mt-2 text-xs italic text-ink-mute">{sim.note}</div>}
 
-      <div className="mt-4 flex items-center justify-between gap-2 border-t border-hairline pt-3">
+      <div className="relative z-10 mt-4 flex items-center justify-between gap-2 border-t border-hairline pt-3 transition-colors duration-300 group-hover:border-hairline-strong">
         {active ? (
           <>
             <TokenLife expiresAt={sim.token_expires_at} />
@@ -183,6 +192,25 @@ function SimChip({ sim, selected, onSelect }: SimChipProps) {
           {atLimit ? "Daily limit reached" : `${sim.sent_today} of ${DAILY_LIMIT_PER_SIM} today`}
         </div>
       )}
+    </Panel>
+  );
+}
+
+export function SimCardSkeleton() {
+  return (
+    <Panel className="transition-all duration-300 ease-out" contentClassName="flex h-full flex-col p-5 relative overflow-hidden bg-card">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="h-5 w-24 animate-pulse rounded bg-substrate" />
+        <div className="h-4 w-16 animate-pulse rounded bg-substrate" />
+      </div>
+      <div className="mt-4 h-4 w-28 animate-pulse rounded bg-substrate" />
+      <div className="mt-2 h-7 w-32 animate-pulse rounded bg-substrate" />
+      <div className="mt-1 h-3 w-24 animate-pulse rounded bg-substrate" />
+      <div className="mt-5 flex items-center justify-between border-t border-hairline pt-3">
+        <div className="h-4 w-32 animate-pulse rounded bg-substrate" />
+        <div className="h-8 w-16 animate-pulse rounded bg-substrate" />
+      </div>
     </Panel>
   );
 }

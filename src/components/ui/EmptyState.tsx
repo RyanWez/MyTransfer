@@ -16,14 +16,18 @@ function EmptyState({ icon, title, body, action, className }: EmptyStateProps) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center px-6 py-16 text-center",
+        "flex flex-col items-center justify-center px-6 py-16 text-center animate-in fade-in zoom-in-95 duration-500 rounded-xl bg-card border border-hairline shadow-sm",
         className
       )}
     >
-      {icon && <div className="mb-4 text-ink-faint">{icon}</div>}
-      <div className="text-sm font-medium text-ink">{title}</div>
-      {body && <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-ink-mute">{body}</p>}
-      {action && <div className="mt-5">{action}</div>}
+      {icon && (
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-substrate text-ink-faint shadow-inner">
+          {icon}
+        </div>
+      )}
+      <div className="text-base font-semibold text-ink">{title}</div>
+      {body && <p className="mt-2 max-w-sm text-sm leading-relaxed text-ink-mute">{body}</p>}
+      {action && <div className="mt-6">{action}</div>}
     </div>
   );
 }

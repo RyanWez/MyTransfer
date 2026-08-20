@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gauge, Send, SquareStack, ScrollText, X } from "lucide-react";
+import { Gauge, Send, SquareStack, ScrollText, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusDot } from "@/components/ui/StatusDot";
 import type { Stats } from "@/lib/types";
@@ -20,9 +20,11 @@ const items = [
 export interface SidebarProps {
   open: boolean;
   onClose: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
+export default function Sidebar({ open, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
   const [fleet, setFleet] = React.useState<{ total: number; active: number } | null>(null);
 
@@ -55,20 +57,41 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-60 shrink-0 flex-col bg-ink text-substrate transition-transform duration-200 md:sticky md:top-0 md:h-screen md:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full"
+          "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col bg-ink text-substrate transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full",
+          collapsed ? "w-20" : "w-60"
         )}
       >
-        <div className="flex items-start justify-between border-b border-white/10 px-5 py-5">
-          <div>
+        {/* Toggle Button */}
+        {onToggleCollapse && (
+          <button
+            onClick={onToggleCollapse}
+            className="absolute -right-3 top-12 z-50 hidden md:flex h-6 w-6 items-center justify-center rounded-full border border-hairline bg-card text-ink shadow-sm transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <ChevronRight className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronLeft className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+
+        <div className={cn("flex items-start border-b border-white/10 py-5", collapsed ? "justify-center px-2" : "justify-between px-5")}>
+          <div className={cn("transition-opacity duration-200", collapsed ? "hidden opacity-0" : "opacity-100")}>
             <div className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
               My<span className="text-brass">Share</span>
             </div>
             <div className="mt-1 text-[11px] text-white/45">Mytel transfer console</div>
           </div>
+          {collapsed && (
+            <div className="font-mono text-sm font-semibold uppercase text-brass" aria-hidden="true">
+              MS
+            </div>
+          )}
           <button
             onClick={onClose}
-            className="-mr-1 rounded p-1 text-white/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass md:hidden"
+            className={cn("-mr-1 rounded p-1 text-white/50 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass md:hidden", collapsed && "hidden")}
             aria-label="Close menu"
           >
             <X className="h-4 w-4" strokeWidth={1.5} />
@@ -84,9 +107,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 key={it.href}
                 href={it.href}
                 onClick={onClose}
+                title={collapsed ? it.label : undefined}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex items-center gap-3 py-2.5 pl-5 pr-4 font-mono text-eyebrow font-semibold uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brass",
+                  "relative flex items-center py-2.5 font-mono text-eyebrow font-semibold uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brass",
+                  collapsed ? "justify-center px-0" : "gap-3 pl-5 pr-4",
                   active ? "text-substrate" : "text-white/50 hover:text-white/85"
                 )}
               >
@@ -99,21 +124,23 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   aria-hidden="true"
                 />
                 <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-                {it.label}
+                {!collapsed && <span className="truncate">{it.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-white/10 px-5 py-4">
-          <div className="flex items-center gap-2 font-mono text-eyebrow uppercase text-white/60">
+        <div className={cn("border-t border-white/10 py-4 transition-all duration-300", collapsed ? "px-2" : "px-5")}>
+          <div className={cn("flex items-center font-mono text-eyebrow uppercase text-white/60", collapsed ? "justify-center" : "gap-2")}>
             <StatusDot tone={fleet?.active ? "signal" : "muted"} size="sm" />
-            {fleet ? (
-              <span className="tnum">
-                {fleet.active} of {fleet.total} SIMs active
-              </span>
-            ) : (
-              <span className="text-white/35">Reading tray…</span>
+            {!collapsed && (
+              fleet ? (
+                <span className="tnum truncate">
+                  {fleet.active} of {fleet.total} SIMs active
+                </span>
+              ) : (
+                <span className="text-white/35 truncate">Reading tray…</span>
+              )
             )}
           </div>
         </div>

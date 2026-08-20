@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/Dialog";
-import { SimCard } from "@/components/SimCard";
+import { SimCard, SimCardSkeleton } from "@/components/SimCard";
 import { fmtKs, fmtPhoneGrouped, sameNumber } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
 import type { Sim } from "@/lib/types";
@@ -237,42 +237,44 @@ export default function SimsPage() {
               </button>
             )}
           </div>
-          <Button variant="secondary" size="sm" onClick={() => openLogin()} className="shrink-0">
+          <Button variant="secondary" size="sm" onClick={() => openLogin()} className="shrink-0 transition-transform hover:scale-105 active:scale-95">
             <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             Log in a SIM
           </Button>
         </div>
       </div>
 
-      {loaded && sims.length === 0 ? (
-        <div className="rounded border border-hairline bg-card">
-          <EmptyState
-            icon={<SquareStack className="h-7 w-7" strokeWidth={1.25} />}
-            title="The tray is empty"
-            body="Log in a Mytel SIM with an SMS code or its MyID password to read balances and send transfers."
-            action={
-              <Button onClick={() => openLogin()}>
-                <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                Log in a SIM
-              </Button>
-            }
-          />
+      {!loaded ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <SimCardSkeleton key={i} />
+          ))}
         </div>
+      ) : loaded && sims.length === 0 ? (
+        <EmptyState
+          icon={<SquareStack className="h-7 w-7" strokeWidth={1.25} />}
+          title="The tray is empty"
+          body="Log in a Mytel SIM with an SMS code or its MyID password to read balances and send transfers."
+          action={
+            <Button onClick={() => openLogin()} className="transition-transform hover:scale-105 active:scale-95">
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+              Log in a SIM
+            </Button>
+          }
+        />
       ) : loaded && filteredSims.length === 0 ? (
-        <div className="rounded border border-hairline bg-card">
-          <EmptyState
-            icon={<Search className="h-7 w-7" strokeWidth={1.25} />}
-            title="No matching SIMs"
-            body={`No SIMs found matching "${searchQuery}". Try a different phone number or note.`}
-            action={
-              <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
-                Clear search
-              </Button>
-            }
-          />
-        </div>
+        <EmptyState
+          icon={<Search className="h-7 w-7" strokeWidth={1.25} />}
+          title="No matching SIMs"
+          body={`No SIMs found matching "${searchQuery}". Try a different phone number or note.`}
+          action={
+            <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+              Clear search
+            </Button>
+          }
+        />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredSims.map((s, i) => (
             <SimCard
               key={s.id}
