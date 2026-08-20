@@ -54,13 +54,11 @@ export default function DashboardPage() {
 
   const onPreset = useCallback((key: RangeKey) => {
     setPreset(key);
-    // Custom keeps whatever span is on screen; the two date inputs take it from there.
     if (key !== "custom") setRange(presetRange(key));
   }, []);
 
-  const onCustom = useCallback((fromDay: string, toDay: string) => {
-    const next = customRange(fromDay, toDay);
-    if (next) setRange(next);
+  const onRangeChange = useCallback((from: number, to: number) => {
+    setRange({ from, to });
   }, []);
 
   // Mirrors the server's rule so the axis caption is right on the first paint instead
@@ -170,7 +168,7 @@ export default function DashboardPage() {
           onPresetChange={onPreset}
           from={range.from}
           to={range.to}
-          onCustomChange={onCustom}
+          onRangeChange={onRangeChange}
         />
 
         {/* Hold the previous render while refetching — no skeleton, no layout jump. */}
