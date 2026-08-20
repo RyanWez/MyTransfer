@@ -77,12 +77,11 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
           </button>
         )}
 
-        <div className={cn("flex items-start border-b border-white/10 py-5", collapsed ? "justify-center px-2" : "justify-between px-5")}>
+        <div className={cn("flex min-h-[70px] items-center border-b border-white/10", collapsed ? "justify-center px-2" : "justify-between px-5")}>
           <div className={cn("transition-opacity duration-200", collapsed ? "hidden opacity-0" : "opacity-100")}>
-            <div className="font-mono text-sm font-semibold uppercase tracking-[0.16em]">
+            <div className="font-mono text-[15px] font-bold uppercase tracking-[0.16em]">
               My<span className="text-brass">Share</span>
             </div>
-            <div className="mt-1 text-[11px] text-white/45">Mytel transfer console</div>
           </div>
           {collapsed && (
             <div className="font-mono text-sm font-semibold uppercase text-brass" aria-hidden="true">
@@ -131,7 +130,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
         </nav>
 
         <div className={cn("border-t border-white/10 py-4 transition-all duration-300", collapsed ? "px-2" : "px-5")}>
-          <div className={cn("flex items-center font-mono text-eyebrow uppercase text-white/60", collapsed ? "justify-center" : "gap-2")}>
+          <div className={cn("flex items-center font-mono text-[10px] tracking-wider uppercase text-white/60", collapsed ? "justify-center" : "gap-2")}>
             <StatusDot tone={fleet?.active ? "signal" : "muted"} size="sm" />
             {!collapsed && (
               fleet ? (

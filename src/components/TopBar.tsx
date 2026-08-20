@@ -19,8 +19,8 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
   const page = PAGES[pathname] ?? { title: "MyShare", sub: "" };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-hairline bg-substrate/85 backdrop-blur-sm">
-      <div className="flex items-center gap-4 px-5 py-3.5 md:px-8">
+    <header className="sticky top-0 z-30 flex min-h-[70px] flex-col justify-center border-b border-hairline bg-substrate/85 backdrop-blur-sm">
+      <div className="flex items-center gap-4 px-5 py-2 md:px-8">
         <Button
           variant="ghost"
           size="icon"
