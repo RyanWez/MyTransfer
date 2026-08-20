@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, SquareStack } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Card";
@@ -8,28 +8,117 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Button } from "@/components/ui/Button";
 import { MetricStrip } from "@/components/MetricStrip";
-import { fmtAmount, fmtClock, fmtPhoneGrouped, statusBadge } from "@/lib/format";
+import { TrendChart } from "@/components/TrendChart";
+import { RangePicker } from "@/components/RangePicker";
+import {
+  fmtAmount,
+  fmtClock,
+  fmtDayHeader,
+  fmtPhoneGrouped,
+  fmtShortDate,
+  statusBadge,
+} from "@/lib/format";
+import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart";
 import { DAILY_LIMIT_PER_SIM } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import type { Stats } from "@/lib/types";
+import type { StatsResponse } from "@/lib/types";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [preset, setPreset] = useState<RangeKey>("today");
+  const [range, setRange] = useState(() => presetRange("today"));
+  const [data, setData] = useState<StatsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/stats")
+    let alive = true;
+    setLoading(true);
+    fetch(`/api/stats?from=${range.from}&to=${range.to}`)
       .then((r) => r.json())
-      .then((d) => setStats(d.stats))
+      .then((d: StatsResponse) => {
+        if (alive && d?.ok) setData(d);
+      })
       .catch(() => {})
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        if (alive) {
+          setLoading(false);
+          setLoaded(true);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [range]);
+
+  const onPreset = useCallback((key: RangeKey) => {
+    setPreset(key);
+    // Custom keeps whatever span is on screen; the two date inputs take it from there.
+    if (key !== "custom") setRange(presetRange(key));
   }, []);
 
-  const sent = stats?.rows.find((r) => r.status === "success");
-  const failed = stats?.rows.find((r) => r.status === "failed");
-  const sentCount = sent?.cnt ?? 0;
-  const capacity = (stats?.loggedIn ?? 0) * DAILY_LIMIT_PER_SIM;
-  const used = capacity ? Math.min(1, sentCount / capacity) : 0;
+  const onCustom = useCallback((fromDay: string, toDay: string) => {
+    const next = customRange(fromDay, toDay);
+    if (next) setRange(next);
+  }, []);
+
+  // Mirrors the server's rule so the axis caption is right on the first paint instead
+  // of flipping from "day" to "hour" when the fetch lands.
+  const hourly = data
+    ? data.series.granularity === "hour"
+    : (range.to - range.from) / 86400 <= 1.001;
+  const buckets = data?.series.buckets ?? [];
+
+  const axis = useMemo(() => {
+    const ticks: string[] = [];
+    const long: string[] = [];
+    for (const b of buckets) {
+      const d = new Date(b.ts * 1000);
+      if (hourly) {
+        ticks.push(pad2(d.getHours()));
+        long.push(`${pad2(d.getHours())}:00`);
+      } else {
+        ticks.push(fmtShortDate(b.ts));
+        long.push(fmtDayHeader(b.ts));
+      }
+    }
+    return { ticks, long };
+  }, [buckets, hourly]);
+
+  const countSeries = useMemo(
+    () => [
+      { key: "sent", label: "Sent", color: CHART_INK.sent, values: buckets.map((b) => b.sent) },
+      {
+        key: "failed",
+        label: "Failed",
+        color: CHART_INK.failed,
+        values: buckets.map((b) => b.failed),
+      },
+    ],
+    [buckets]
+  );
+
+  const volumeSeries = useMemo(
+    () => [
+      {
+        key: "volume",
+        label: "Volume",
+        color: CHART_INK.volume,
+        values: buckets.map((b) => b.volume),
+      },
+    ],
+    [buckets]
+  );
+
+  const stats = data?.stats;
+  const totals = data?.totals;
+  // The charts and the tiles describe the same slice, so one phrase names it for both.
+  const period =
+    preset === "today"
+      ? "today"
+      : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to - 1)}`;
+  const grain = hourly ? "Hour by hour" : "Day by day";
 
   if (loaded && stats && stats.simCount === 0) {
     return (
@@ -50,7 +139,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
+    <div className="mx-auto max-w-5xl space-y-8">
       {/* The one number the operator opens this page for. */}
       <section className="animate-rise-in">
         <Eyebrow>Total available</Eyebrow>
@@ -74,44 +163,67 @@ export default function DashboardPage() {
         </p>
       </section>
 
-      <section className="animate-rise-in [animation-delay:40ms]">
-        <MetricStrip
-          items={[
-            { label: "Sent today", value: String(sentCount) },
-            {
-              label: "Volume today",
-              value: sent ? fmtAmount(sent.total) : "0",
-              sub: "Ks, fees excluded",
-              // Brass means money — a zero isn't money worth pointing at.
-              tone: sent?.total ? "brass" : "muted",
-            },
-            {
-              label: "Failed today",
-              value: String(failed?.cnt ?? 0),
-              tone: failed?.cnt ? "alert" : "muted",
-            },
-            {
-              label: "Capacity left",
-              value: String(Math.max(0, capacity - sentCount)),
-              sub: `of ${capacity} transfers`,
-            },
-          ]}
+      {/* One filter row, scoping every figure and curve below it. */}
+      <section className="animate-rise-in space-y-4 [animation-delay:40ms]">
+        <RangePicker
+          preset={preset}
+          onPresetChange={onPreset}
+          from={range.from}
+          to={range.to}
+          onCustomChange={onCustom}
         />
 
-        {/* The 5-per-SIM-per-day rule, drawn instead of described. */}
-        <div className="mt-3 flex items-center gap-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-hairline">
-            <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-500",
-                used >= 0.8 ? "bg-alert" : "bg-ink"
-              )}
-              style={{ width: `${used * 100}%` }}
+        {/* Hold the previous render while refetching — no skeleton, no layout jump. */}
+        <div className={cn("space-y-6 transition-opacity", loading && data && "opacity-50")}>
+          <MetricStrip
+            items={[
+              { label: `Sent ${period}`, value: fmtAmount(totals?.sent ?? 0) },
+              {
+                label: `Volume ${period}`,
+                value: fmtAmount(totals?.volume ?? 0),
+                sub: "Ks, fees excluded",
+                // Brass means money — a zero isn't money worth pointing at.
+                tone: totals?.volume ? "brass" : "muted",
+              },
+              {
+                label: `Failed ${period}`,
+                value: fmtAmount(totals?.failed ?? 0),
+                tone: totals?.failed ? "alert" : "muted",
+              },
+            ]}
+          />
+
+          {/* Two measures, two charts. Counts and Ks share no scale, so they never
+              share an axis. */}
+          <div className="rounded border border-hairline bg-card px-4 py-4">
+            <div className="mb-1 flex items-baseline justify-between gap-4">
+              <Eyebrow>Transfers</Eyebrow>
+              <span className="font-mono text-eyebrow uppercase text-ink-faint">
+                {grain}
+              </span>
+            </div>
+            <TrendChart
+              labels={axis.ticks}
+              longLabels={axis.long}
+              series={countSeries}
+              replayKey={`${range.from}-${range.to}-count`}
+              caption={`Transfers ${period}, ${grain.toLowerCase()}`}
             />
           </div>
-          <span className="shrink-0 font-mono text-eyebrow uppercase tnum text-ink-mute">
-            {sentCount} of {capacity} daily transfers used
-          </span>
+
+          <div className="rounded border border-hairline bg-card px-4 py-4">
+            <div className="mb-1 flex items-baseline justify-between gap-4">
+              <Eyebrow>Volume moved</Eyebrow>
+              <span className="font-mono text-eyebrow uppercase text-ink-faint">Ks</span>
+            </div>
+            <TrendChart
+              labels={axis.ticks}
+              longLabels={axis.long}
+              series={volumeSeries}
+              replayKey={`${range.from}-${range.to}-volume`}
+              caption={`Volume moved ${period} in Ks, ${grain.toLowerCase()}`}
+            />
+          </div>
         </div>
       </section>
 

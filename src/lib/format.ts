@@ -30,6 +30,18 @@ export function fmtPhoneGrouped(p: string): string {
   return [digits.slice(0, 2), ...groups].join(" ");
 }
 
+/**
+ * Do two typed-or-stored numbers mean the same SIM?
+ *
+ * Compares the last 9 digits, which is what survives every form the app sees:
+ * `09750111222`, `+959750111222`, `959750111222`.
+ */
+export function sameNumber(a: string, b: string): boolean {
+  const tail = (s: string) => s.replace(/\D/g, "").slice(-9);
+  const ta = tail(a);
+  return ta.length === 9 && ta === tail(b);
+}
+
 export function fmtTime(ts: number): string {
   return new Date(ts * 1000).toLocaleString("en-GB", {
     day: "2-digit",

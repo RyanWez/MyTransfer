@@ -93,7 +93,13 @@ async function sendRegisterOtp(msisdn: string): Promise<OtpAttempt> {
 
 function finish(msisdn: string, attempt: OtpAttempt) {
   if (attempt.ok) {
-    dbApi.upsertSim(msisdn, { status: "otp_pending" });
+    // Re-logging in a SIM that is already working must not knock it back to
+    // "waiting for OTP": if the operator abandons the dialog, a perfectly valid
+    // token would sit in the tray looking logged out.
+    const existing = dbApi.getSim(msisdn);
+    if (!existing || existing.status !== "active") {
+      dbApi.upsertSim(msisdn, { status: "otp_pending" });
+    }
   }
   return NextResponse.json({
     ok: attempt.ok,

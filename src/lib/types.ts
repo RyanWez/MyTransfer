@@ -29,10 +29,28 @@ export interface Transfer {
 }
 
 export interface Stats {
-  rows: { status: string; cnt: number; total: number }[];
   simCount: number;
   loggedIn: number;
   totalBalance: number;
-  perSimToday: Record<string, number>;
   recent: Transfer[];
+}
+
+/** One point on the dashboard curves. `ts` is the local start of the bucket. */
+export interface SeriesBucket {
+  ts: number;
+  sent: number;
+  failed: number;
+  volume: number;
+}
+
+export interface StatsResponse {
+  ok: boolean;
+  stats: Stats;
+  series: {
+    from: number;
+    to: number;
+    granularity: "hour" | "day";
+    buckets: SeriesBucket[];
+  };
+  totals: { sent: number; failed: number; volume: number };
 }

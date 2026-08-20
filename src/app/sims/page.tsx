@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/Dialog";
 import { SimCard } from "@/components/SimCard";
-import { fmtKs, fmtPhoneGrouped } from "@/lib/format";
+import { fmtKs, fmtPhoneGrouped, sameNumber } from "@/lib/format";
 import type { Sim } from "@/lib/types";
 
 type LoginMode = "otp" | "password";
@@ -195,6 +195,8 @@ export default function SimsPage() {
   }
 
   const canSubmit = mode === "otp" ? otp.length === 6 : password.length > 0;
+  /** A number already in the tray is a token refresh, not a second card. */
+  const alreadyInTray = phone ? sims.find((s) => sameNumber(s.phone, phone)) : undefined;
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
@@ -321,6 +323,14 @@ export default function SimsPage() {
               autoComplete="off"
               className="font-mono"
             />
+
+            {alreadyInTray && (
+              <p className="text-sm text-ink-mute">
+                {fmtPhoneGrouped(alreadyInTray.phone)} is already in the tray. Logging in again
+                replaces its stored token and keeps its place — no duplicate card, and its
+                transfer history is untouched.
+              </p>
+            )}
 
             {mode === "otp"
               ? otpSent && (

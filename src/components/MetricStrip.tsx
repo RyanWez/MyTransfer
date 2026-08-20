@@ -18,6 +18,14 @@ const valueTone: Record<Tone, string> = {
   muted: "text-ink",
 };
 
+/** Explicit classes so Tailwind's scanner keeps them — a template string wouldn't be seen. */
+const columns: Record<number, string> = {
+  1: "grid-cols-1",
+  2: "grid-cols-2",
+  3: "grid-cols-1 sm:grid-cols-3",
+  4: "grid-cols-2 md:grid-cols-4",
+};
+
 /**
  * Metrics as hairline-divided columns rather than boxed cards — one less border
  * per figure, and it reads as an instrument panel. `gap-px` over a hairline
@@ -27,7 +35,8 @@ function MetricStrip({ items, className }: { items: Metric[]; className?: string
   return (
     <div
       className={cn(
-        "grid grid-cols-2 gap-px overflow-hidden rounded border border-hairline bg-hairline md:grid-cols-4",
+        "grid gap-px overflow-hidden rounded border border-hairline bg-hairline",
+        columns[items.length] ?? "grid-cols-2 md:grid-cols-4",
         className
       )}
     >

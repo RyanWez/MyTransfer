@@ -76,6 +76,38 @@ const startOfToday = () => {
   return Math.floor(d.getTime() / 1000);
 };
 
+/** Chart bucket width. Hourly for a single day, daily for anything longer. */
+export type Granularity = "hour" | "day";
+
+export interface SeriesBucket {
+  /** Unix seconds at the start of the bucket, in local time. */
+  ts: number;
+  sent: number;
+  failed: number;
+  /** Ks moved by successful transfers in this bucket, fees excluded. */
+  volume: number;
+}
+
+/**
+ * Bucket keys are built by SQLite in *local* time so an "hour" means the hour the
+ * operator saw, not a UTC offset of it. `bucketKey` below must format identically.
+ */
+const BUCKET_FORMAT: Record<Granularity, string> = {
+  hour: "%Y-%m-%dT%H",
+  day: "%Y-%m-%d",
+};
+
+function bucketKey(d: Date, granularity: Granularity): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const day = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return granularity === "hour" ? `${day}T${p(d.getHours())}` : day;
+}
+
+function stepBucket(d: Date, granularity: Granularity) {
+  if (granularity === "hour") d.setHours(d.getHours() + 1, 0, 0, 0);
+  else d.setDate(d.getDate() + 1);
+}
+
 // Re-exported so server code has one import for both the DB and the limit; the
 // constant itself lives in lib/constants.ts because client components need it too
 // and must not pull better-sqlite3 into the browser bundle.
@@ -181,32 +213,66 @@ export const dbApi = {
     return Object.fromEntries(rows.map((r) => [r.sender_phone, r.cnt]));
   },
 
-  todayStats() {
-    const ts = startOfToday();
+  /**
+   * Per-bucket transfer counts and volume for a time range, gap-filled so the chart
+   * gets a continuous curve instead of skipping quiet hours.
+   *
+   * Buckets stop at the current one: drawing the rest of today as a flat zero line
+   * would read as "nothing happened" rather than "hasn't happened yet".
+   */
+  rangeSeries(fromTs: number, toTs: number, granularity: Granularity): SeriesBucket[] {
     const rows = db
       .prepare(
-        `SELECT status, COUNT(*) as cnt, COALESCE(SUM(amount),0) as total
-         FROM transfers WHERE created_at >= ? GROUP BY status`
+        `SELECT strftime('${BUCKET_FORMAT[granularity]}', created_at, 'unixepoch', 'localtime') AS bucket,
+                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS sent,
+                SUM(CASE WHEN status = 'failed'  THEN 1 ELSE 0 END) AS failed,
+                SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END) AS volume
+         FROM transfers
+         WHERE created_at >= ? AND created_at < ?
+         GROUP BY bucket`
       )
-      .all(ts) as { status: string; cnt: number; total: number }[];
+      .all(fromTs, toTs) as { bucket: string; sent: number; failed: number; volume: number }[];
+
+    const byKey = new Map(rows.map((r) => [r.bucket, r]));
+    const nowSec = now();
+    const out: SeriesBucket[] = [];
+
+    const cursor = new Date(fromTs * 1000);
+    if (granularity === "hour") cursor.setMinutes(0, 0, 0);
+    else cursor.setHours(0, 0, 0, 0);
+
+    // Guards a pathological range (future dates, from > to) from spinning forever.
+    for (let i = 0; i < 2000; i++) {
+      const ts = Math.floor(cursor.getTime() / 1000);
+      // The range is half-open, so the bucket starting exactly at `to` belongs to the
+      // next range — without this a full past day yields 25 hours.
+      if (ts >= toTs) break;
+      // And never draw past the current bucket, so an unfinished today doesn't
+      // flatline to zero for the hours that haven't happened.
+      if (ts > nowSec) break;
+      const hit = byKey.get(bucketKey(cursor, granularity));
+      out.push({
+        ts,
+        sent: hit?.sent ?? 0,
+        failed: hit?.failed ?? 0,
+        volume: hit?.volume ?? 0,
+      });
+      stepBucket(cursor, granularity);
+    }
+    return out;
+  },
+
+  /** Tray-wide figures that don't depend on the selected date range. */
+  trayStats() {
     const simCount = (db.prepare("SELECT COUNT(*) c FROM sims").get() as { c: number }).c;
     const loggedIn = (
       db.prepare("SELECT COUNT(*) c FROM sims WHERE status = 'active'").get() as { c: number }
     ).c;
     const totalBalance = (
       db
-        .prepare(
-          "SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'"
-        )
+        .prepare("SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'")
         .get() as { c: number }
     ).c;
-    return {
-      rows,
-      simCount,
-      loggedIn,
-      totalBalance,
-      perSimToday: this.todayCountBySender(),
-      recent: this.listTransfers(5),
-    };
+    return { simCount, loggedIn, totalBalance, recent: this.listTransfers(5) };
   },
 };
