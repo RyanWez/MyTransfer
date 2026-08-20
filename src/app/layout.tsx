@@ -22,6 +22,9 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "MyShare · Mytel transfer console",
   description: "Send Mytel balance between SIMs and keep the log.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({

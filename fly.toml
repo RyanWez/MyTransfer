@@ -1,7 +1,7 @@
 # Fly.io configuration — deploy with `flyctl deploy` (see README "Deploy").
 # Sized for the free allowance: one shared-cpu-1x / 256MB VM.
 
-app = "myshare-console"
+app = "myshare"
 primary_region = "sin"
 kill_timeout = 10
 

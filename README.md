@@ -26,7 +26,7 @@ no code changes are needed for deployment. Sized for Fly.io's free allowance
 flyctl auth login
 
 # Create the app (name must match `app` in fly.toml)
-flyctl apps create myshare-console
+flyctl apps create myshare
 
 # Persistent storage for the database (1GB is plenty)
 flyctl volumes create myshare_data --region sin --size 1
