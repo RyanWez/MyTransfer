@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Panel } from "@/components/ui/Panel";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SimChip } from "@/components/SimCard";
+import { SimChip, SimChipSkeleton } from "@/components/SimCard";
 import { Stepper } from "@/components/Stepper";
 import { Receipt, ReceiptRow, ReceiptDivider } from "@/components/Receipt";
 import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
@@ -281,7 +281,13 @@ export default function TransferPage() {
         </div>
 
         <div className="mt-2.5">
-          {displayedSims.length === 0 ? (
+          {!loaded ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {[1, 2, 3].map((i) => (
+                <SimChipSkeleton key={i} />
+              ))}
+            </div>
+          ) : displayedSims.length === 0 ? (
             <div className="w-full rounded border border-hairline bg-card p-6 text-center">
               <p className="text-xs text-ink-mute">
                 No SIM found matching &quot;{searchQuery}&quot;

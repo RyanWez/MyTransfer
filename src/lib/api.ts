@@ -20,14 +20,16 @@ async function cachedFetch<T>(key: string, url: string, ttlMs: number = DEFAULT_
     return inFlight.get(key) as Promise<T>;
   }
 
-  const promise = fetch(url)
-    .then((res) => {
+  const promise = Promise.all([
+    fetch(url).then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       return res.json();
-    })
-    .then((data: T) => {
-      cache.set(key, { data, timestamp: Date.now() });
-      return data;
+    }),
+    new Promise((resolve) => setTimeout(resolve, 300)) // 300ms minimum delay for smooth skeleton loader transition
+  ])
+    .then(([data]) => {
+      cache.set(key, { data: data as T, timestamp: Date.now() });
+      return data as T;
     })
     .finally(() => {
       inFlight.delete(key);

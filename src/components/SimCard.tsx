@@ -215,4 +215,18 @@ export function SimCardSkeleton() {
   );
 }
 
+export function SimChipSkeleton() {
+  return (
+    <Panel className="transition-all duration-300 ease-out" notch="sm" contentClassName="flex flex-col p-3.5 relative overflow-hidden bg-card">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+      <div className="flex items-center gap-2">
+        <div className="h-4 w-4 rounded-full bg-substrate animate-pulse" />
+        <div className="h-4 w-24 bg-substrate rounded animate-pulse" />
+      </div>
+      <div className="mt-1.5 h-6 w-32 bg-substrate rounded animate-pulse" />
+      <div className="mt-1 h-3 w-40 bg-substrate rounded animate-pulse" />
+    </Panel>
+  );
+}
+
 export { SimCard, SimChip };

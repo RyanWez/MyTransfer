@@ -45,6 +45,40 @@ function getPaginationRange(current: number, total: number): (number | "...")[] 
   return [1, "...", current - 1, current, current + 1, "...", total];
 }
 
+function HistorySkeleton() {
+  return (
+    <div className="max-w-4xl mx-auto space-y-5 animate-pulse">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="h-5 w-32 bg-substrate rounded" />
+        <div className="flex gap-2.5">
+          <div className="h-8 w-44 sm:w-60 bg-substrate rounded" />
+          <div className="h-8 w-40 bg-substrate rounded" />
+        </div>
+      </div>
+      
+      <section>
+        <div className="flex items-baseline justify-between gap-4 pb-2">
+          <div className="h-4 w-24 bg-substrate rounded" />
+          <div className="h-4 w-32 bg-substrate rounded" />
+        </div>
+        <div className="overflow-hidden rounded border border-hairline bg-card">
+          <ul className="divide-y divide-hairline">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <li key={i} className="p-4 flex items-center gap-4 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                <div className="h-4 w-4 bg-substrate rounded-full shrink-0" />
+                <div className="h-4 w-12 bg-substrate rounded shrink-0" />
+                <div className="h-4 w-48 bg-substrate rounded flex-1" />
+                <div className="h-5 w-20 bg-substrate rounded shrink-0 ml-auto" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
   const [offset, setOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -221,6 +255,10 @@ export default function HistoryPage() {
       setIsDeleting(false);
       setDeleteId(null);
     }
+  }
+
+  if (!loaded) {
+    return <HistorySkeleton />;
   }
 
   return (
