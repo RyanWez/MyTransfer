@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-import Shell from "@/components/Shell";
-import Toasts from "@/components/Toasts";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
 // Plex was drawn for technical systems and its sans and mono were designed
@@ -33,8 +31,7 @@ export default function RootLayout({
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen antialiased bg-substrate text-ink selection:bg-brass-soft selection:text-ink">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Shell>{children}</Shell>
-          <Toasts />
+          {children}
         </ThemeProvider>
       </body>
     </html>

@@ -186,9 +186,10 @@ export default function DashboardPage() {
                 tone: totals?.volume ? "brass" : "muted",
               },
               {
-                label: `Failed ${period}`,
-                value: fmtAmount(totals?.failed ?? 0),
-                tone: totals?.failed ? "alert" : "muted",
+                label: `Volume (-15%) ${period}`,
+                value: fmtAmount(Math.round((totals?.volume ?? 0) * 0.85)),
+                sub: "Ks, 15% deducted",
+                tone: totals?.volume ? "brass" : "muted",
               },
             ]}
           />

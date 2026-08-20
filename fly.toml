@@ -1,0 +1,40 @@
+# Fly.io configuration — deploy with `flyctl deploy` (see README "Deploy").
+# Sized for the free allowance: one shared-cpu-1x / 256MB VM.
+
+app = "myshare-console"
+primary_region = "sin"
+kill_timeout = 10
+
+[build]
+
+[http_service]
+  internal_port = 3100
+  force_https = true
+  # Keep the machine running so there's no cold start. The free allowance
+  # covers this; flip to true if you'd rather let it sleep between visits.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+# The SQLite database lives on a persistent volume so redeploys and restarts
+# never touch it. Create it once with:
+#   flyctl volumes create myshare_data --region sin --size 1
+[mounts]
+  source = "myshare_data"
+  destination = "/app/data"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "256mb"
+
+# Health check — the login endpoint is exempt from the auth middleware and
+# answers 200 without a session.
+[checks]
+  [checks.status]
+    type = "http"
+    port = 3100
+    interval = "30s"
+    timeout = "5s"
+    path = "/api/auth/login"
+    method = "GET"

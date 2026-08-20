@@ -13,6 +13,70 @@ npm install
 npm run dev        # http://localhost:3100
 ```
 
+## Deploy (Fly.io, free tier)
+
+The console runs in Docker with the SQLite database on a persistent volume, so
+no code changes are needed for deployment. Sized for Fly.io's free allowance
+(one shared-cpu-1x / 256MB VM, 1GB volume).
+
+### 1. One-time setup
+
+```bash
+# Install the CLI: https://fly.io/docs/hands-on/install-flyctl/
+flyctl auth login
+
+# Create the app (name must match `app` in fly.toml)
+flyctl apps create myshare-console
+
+# Persistent storage for the database (1GB is plenty)
+flyctl volumes create myshare_data --region sin --size 1
+
+# Secrets — the console refuses to start open in production.
+# Pick a strong password; generate the secret with openssl:
+flyctl secrets set \
+  AUTH_PASSWORD='<your-strong-password>' \
+  AUTH_SECRET="$(openssl rand -hex 32)"
+```
+
+### 2. Deploy
+
+```bash
+flyctl deploy
+flyctl open          # → https://myshare-console.fly.dev
+```
+
+Every later deploy is just `flyctl deploy` (or wire up `flyctl deploy` in CI).
+The database on the volume survives redeploys and restarts.
+
+### 3. Backups
+
+The DB holds live SIM tokens — keep a copy off the volume:
+
+```bash
+flyctl ssh console -C "node scripts/backup-db.js"
+flyctl ssh sftp get /app/data/backups/dashboard-<timestamp>.db ./dashboard-backup.db
+```
+
+`scripts/backup-db.js` keeps the 7 newest backups in `/app/data/backups`.
+
+### Auth
+
+- Every page and API route is gated by `src/middleware.ts`; only `/login`
+  is public. The session is an httpOnly cookie signed with `AUTH_SECRET`.
+- In **production** the gate fails closed: no `AUTH_PASSWORD` → nothing gets in.
+- In **dev** (`npm run dev`) the console stays open unless you set
+  `AUTH_PASSWORD` locally.
+- Log out from the top bar; sessions last 7 days.
+
+### Notes
+
+- Region is `sin` (Singapore) — closest to Myanmar with the free-tier
+  bandwidth allowance. Change `primary_region` and recreate the volume to move.
+- If 256MB ever feels tight, bump `[[vm]] memory` to `512mb` in `fly.toml`
+  (still inside the free allowance, but it uses more of it).
+- `TZ=Asia/Yangon` is baked into the image so "today" in the stats matches the
+  operator's day.
+
 ## Pages
 
 | Page | Purpose |

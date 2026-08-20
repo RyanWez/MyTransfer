@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Menu, Plus } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, Menu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -17,7 +17,17 @@ const PAGES: Record<string, { title: string; sub: string }> = {
 /** The only place a page title appears — pages start straight into content. */
 export default function TopBar({ onMenu }: { onMenu: () => void }) {
   const pathname = usePathname();
+  const router = useRouter();
   const page = PAGES[pathname] ?? { title: "MyShare", sub: "" };
+
+  async function logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+      router.refresh();
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 flex min-h-[70px] flex-col justify-center border-b border-hairline bg-substrate/85 backdrop-blur-sm">
@@ -53,6 +63,15 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
               </Link>
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            aria-label="Log out"
+            title="Log out"
+          >
+            <LogOut className="h-4 w-4" strokeWidth={1.5} />
+          </Button>
         </div>
       </div>
     </header>

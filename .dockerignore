@@ -1,0 +1,13 @@
+node_modules/
+.next/
+data/
+.git/
+.gitignore
+.env*.local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+tsconfig.tsbuildinfo
+README.md
+.claude/
