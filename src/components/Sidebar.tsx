@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { StatusDot } from "@/components/ui/StatusDot";
 import type { Stats } from "@/lib/types";
 
+import { fetchStats } from "@/lib/api";
+
 const items = [
   { href: "/", label: "Overview", icon: Gauge },
   { href: "/transfer", label: "Transfer", icon: Send },
@@ -24,12 +26,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [fleet, setFleet] = React.useState<{ total: number; active: number } | null>(null);
 
-  // Refetch per navigation so the footer count reflects a login that just happened.
+  // Uses deduplicated cached fetchStats so route navigation shares in-flight requests with Dashboard
   React.useEffect(() => {
     let alive = true;
-    fetch("/api/stats")
-      .then((r) => r.json())
-      .then((d: { ok?: boolean; stats?: Stats }) => {
+    fetchStats()
+      .then((d) => {
         if (alive && d?.stats) {
           setFleet({ total: d.stats.simCount, active: d.stats.loggedIn });
         }

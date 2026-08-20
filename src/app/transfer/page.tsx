@@ -14,6 +14,7 @@ import { SimChip } from "@/components/SimCard";
 import { Stepper } from "@/components/Stepper";
 import { Receipt, ReceiptRow, ReceiptDivider } from "@/components/Receipt";
 import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
+import { fetchSims, invalidateCache } from "@/lib/api";
 import type { Sim } from "@/lib/types";
 
 const QUICK = [500, 800, 1000, 5000];
@@ -45,10 +46,8 @@ export default function TransferPage() {
   const [cooldown, setCooldown] = useState(0);
 
   const loadSims = useCallback(() => {
-    return fetch("/api/sims")
-      .then((r) => r.json())
-      .then((d) => {
-        const all = (d.sims ?? []) as Sim[];
+    return fetchSims()
+      .then((all) => {
         setSims(all);
         setSender((cur) => {
           if (cur && all.some((s) => s.phone === cur && s.status === "active")) return cur;
@@ -167,6 +166,7 @@ export default function TransferPage() {
         toast.success("Transfer sent", {
           description: `${fmtKs(amt)} to ${fmtPhoneGrouped(receiver)}.`,
         });
+        invalidateCache();
         loadSims();
       } else {
         failToast(r, "Transfer failed");

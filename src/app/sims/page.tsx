@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/Dialog";
 import { SimCard } from "@/components/SimCard";
 import { fmtKs, fmtPhoneGrouped, sameNumber } from "@/lib/format";
+import { fetchSims, invalidateCache } from "@/lib/api";
 import type { Sim } from "@/lib/types";
 
 type LoginMode = "otp" | "password";
@@ -46,9 +47,8 @@ export default function SimsPage() {
 
   const load = useCallback(
     () =>
-      fetch("/api/sims")
-        .then((r) => r.json())
-        .then((d) => setSims((d.sims ?? []) as Sim[]))
+      fetchSims()
+        .then((all) => setSims(all))
         .catch(() => {})
         .finally(() => setLoaded(true)),
     []
@@ -138,6 +138,7 @@ export default function SimsPage() {
           }
         );
         setLoginOpen(false);
+        invalidateCache();
         load();
       } else {
         toast.error(flow === "register" ? "Couldn't open the account" : "Login failed", {
@@ -171,6 +172,7 @@ export default function SimsPage() {
       } else {
         toast.error("Couldn't read the balance", { description: r.message || r.error || undefined });
       }
+      invalidateCache();
       load();
     } catch {
       toast.error("Network error", { description: "The console couldn't reach Mytel. Try again." });
@@ -191,6 +193,7 @@ export default function SimsPage() {
     toast.success(`${fmtPhoneGrouped(sim.phone)} removed`, {
       description: "Its transfer history stays in the log.",
     });
+    invalidateCache();
     load();
   }
 

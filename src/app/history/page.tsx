@@ -16,6 +16,7 @@ import {
   statusBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { fetchHistory } from "@/lib/api";
 import type { Transfer } from "@/lib/types";
 
 type Filter = "all" | "success" | "failed";
@@ -44,33 +45,33 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((d) => setRows((d.transfers ?? []) as Transfer[]))
+    fetchHistory()
+      .then((transfers) => setRows(transfers))
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, []);
 
   const filtered = useMemo(() => {
-    const q = searchQuery.toLowerCase().replace(/[\s-+]/g, "");
+    const trimmed = searchQuery.trim();
+    const q = trimmed.toLowerCase().replace(/[\s-+]/g, "");
+    const searchLower = trimmed.toLowerCase();
+
     return rows.filter((r) => {
       const statusMatch = filter === "all" || r.status === filter;
       if (!statusMatch) return false;
-      if (!searchQuery.trim()) return true;
+      if (!trimmed) return true;
 
       const senderClean = r.sender_phone.toLowerCase().replace(/[\s-+]/g, "");
-      const receiverClean = r.receiver_phone.toLowerCase().replace(/[\s-+]/g, "");
-      const msgMatch = r.message ? r.message.toLowerCase().includes(searchQuery.toLowerCase()) : false;
-      const amountMatch = String(r.amount).includes(searchQuery.trim());
-      const errorCodeMatch = r.error_code !== null ? String(r.error_code).includes(searchQuery.trim()) : false;
+      if (senderClean.includes(q)) return true;
 
-      return (
-        senderClean.includes(q) ||
-        receiverClean.includes(q) ||
-        msgMatch ||
-        amountMatch ||
-        errorCodeMatch
-      );
+      const receiverClean = r.receiver_phone.toLowerCase().replace(/[\s-+]/g, "");
+      if (receiverClean.includes(q)) return true;
+
+      if (r.message && r.message.toLowerCase().includes(searchLower)) return true;
+      if (String(r.amount).includes(trimmed)) return true;
+      if (r.error_code !== null && String(r.error_code).includes(trimmed)) return true;
+
+      return false;
     });
   }, [rows, filter, searchQuery]);
 

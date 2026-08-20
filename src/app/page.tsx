@@ -21,6 +21,7 @@ import {
 import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart";
 import { DAILY_LIMIT_PER_SIM } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { fetchStats } from "@/lib/api";
 import type { StatsResponse } from "@/lib/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -35,8 +36,7 @@ export default function DashboardPage() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`/api/stats?from=${range.from}&to=${range.to}`)
-      .then((r) => r.json())
+    fetchStats(range.from, range.to)
       .then((d: StatsResponse) => {
         if (alive && d?.ok) setData(d);
       })
