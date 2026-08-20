@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowRight, Check, SquareStack } from "lucide-react";
+import { ArrowRight, Check, Search, SquareStack, X } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -36,6 +36,7 @@ export default function TransferPage() {
   const [receiver, setReceiver] = useState("");
   const [amount, setAmount] = useState("");
   const [otp, setOtp] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [stage, setStage] = useState<"form" | "otp" | "done">("form");
   const [busy, setBusy] = useState(false);
@@ -76,7 +77,31 @@ export default function TransferPage() {
   const activeSims = sims.filter((s) => s.status === "active");
   // Pickable SIMs first. Unusable ones still render — so it's clear why a SIM is
   // missing — but they belong after the choices, not above them.
-  const orderedSims = [...activeSims, ...sims.filter((s) => s.status !== "active")];
+  const orderedSims = useMemo(
+    () => [...activeSims, ...sims.filter((s) => s.status !== "active")],
+    [sims, activeSims]
+  );
+
+  const displayedSims = useMemo(() => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().replace(/[\s-+]/g, "");
+      return orderedSims.filter((s) => {
+        const phoneClean = s.phone.toLowerCase().replace(/[\s-+]/g, "");
+        const noteMatch = s.note ? s.note.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+        return phoneClean.includes(q) || noteMatch;
+      });
+    }
+
+    // Default: Show up to 6 SIMs
+    const top6 = orderedSims.slice(0, 6);
+    if (sender && !top6.some((s) => s.phone === sender)) {
+      const currentSelected = orderedSims.find((s) => s.phone === sender);
+      if (currentSelected) {
+        return [currentSelected, ...top6.slice(0, 5)];
+      }
+    }
+    return top6;
+  }, [orderedSims, searchQuery, sender]);
   const amt = Number(amount);
   const fee = Number.isFinite(amt) ? Math.round(amt * 0.05) : 0;
   const total = amt + fee;
@@ -161,6 +186,7 @@ export default function TransferPage() {
     setReceipt(null);
     setResendAt(0);
     setCooldown(0);
+    setSearchQuery("");
   }
 
   if (loaded && activeSims.length === 0 && stage === "form") {
@@ -228,16 +254,62 @@ export default function TransferPage() {
 
       {/* Sender */}
       <section>
-        <Eyebrow>From</Eyebrow>
-        <div className="mt-2.5 flex flex-wrap gap-2.5">
-          {orderedSims.map((s) => (
-            <SimChip
-              key={s.phone}
-              sim={s}
-              selected={s.phone === sender}
-              onSelect={(sim) => !locked && setSender(sim.phone)}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <Eyebrow>From</Eyebrow>
+            {sims.length > 6 && !searchQuery.trim() && (
+              <span className="font-mono text-eyebrow uppercase text-ink-faint">
+                ({Math.min(6, displayedSims.length)} of {sims.length})
+              </span>
+            )}
+          </div>
+          <div className="relative w-44 sm:w-56">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={locked}
+              placeholder="Search sender SIM..."
+              className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-hairline-strong focus:outline-none focus:ring-1 focus:ring-ink disabled:opacity-50"
             />
-          ))}
+            {searchQuery && !locked && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap gap-2.5">
+          {displayedSims.length === 0 ? (
+            <div className="w-full rounded border border-hairline bg-card p-4 text-center">
+              <p className="text-xs text-ink-mute">
+                No SIM found matching &quot;{searchQuery}&quot;
+              </p>
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="mt-1 font-mono text-xs text-brass-deep underline hover:text-ink"
+              >
+                Clear search
+              </button>
+            </div>
+          ) : (
+            displayedSims.map((s) => (
+              <SimChip
+                key={s.phone}
+                sim={s}
+                selected={s.phone === sender}
+                onSelect={(sim) => !locked && setSender(sim.phone)}
+              />
+            ))
+          )}
         </div>
       </section>
 
