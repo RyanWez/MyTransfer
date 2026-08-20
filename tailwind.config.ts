@@ -1,40 +1,40 @@
 import type { Config } from "tailwindcss";
 import defaultTheme from "tailwindcss/defaultTheme";
 
-// "Graphite & brass" — dynamic theme variables supporting both Light and Dark mode.
+// "Graphite & brass" — a warm paper substrate under cool graphite ink, with brass
+// reserved for one job only: money. See the plan for the full rationale.
 const config: Config = {
-  darkMode: "class",
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
-        substrate: "rgb(var(--substrate) / <alpha-value>)",
-        card: "rgb(var(--card) / <alpha-value>)",
+        substrate: "#F2F0EC",
+        card: "#FBFAF8",
         ink: {
-          DEFAULT: "rgb(var(--ink) / <alpha-value>)",
-          soft: "rgb(var(--ink-soft) / <alpha-value>)",
-          mute: "rgb(var(--ink-mute) / <alpha-value>)",
-          faint: "rgb(var(--ink-faint) / <alpha-value>)",
+          DEFAULT: "#14161A",
+          soft: "#4A4E56",
+          mute: "#7C818B",
+          faint: "#A9ADB5",
         },
         // Money, and only money. Also the color of a SIM's contact pads.
         brass: {
-          DEFAULT: "rgb(var(--brass) / <alpha-value>)",
-          deep: "rgb(var(--brass-deep) / <alpha-value>)",
-          wash: "rgb(var(--brass-wash) / <alpha-value>)",
+          DEFAULT: "#C89B3C",
+          deep: "#A87F28",
+          wash: "#F5EEDD",
         },
         signal: {
-          DEFAULT: "rgb(var(--signal) / <alpha-value>)",
-          deep: "rgb(var(--signal-deep) / <alpha-value>)",
-          wash: "rgb(var(--signal-wash) / <alpha-value>)",
+          DEFAULT: "#00C566",
+          deep: "#00A855",
+          wash: "#E2F7EC",
         },
         alert: {
-          DEFAULT: "rgb(var(--alert) / <alpha-value>)",
-          deep: "rgb(var(--alert-deep) / <alpha-value>)",
-          wash: "rgb(var(--alert-wash) / <alpha-value>)",
+          DEFAULT: "#FF3B30",
+          deep: "#DE2A20",
+          wash: "#FFE9E7",
         },
         hairline: {
-          DEFAULT: "rgb(var(--hairline) / <alpha-value>)",
-          strong: "rgb(var(--hairline-strong) / <alpha-value>)",
+          DEFAULT: "#DCD8D1",
+          strong: "#C7C2B9",
         },
       },
       fontFamily: {
@@ -55,7 +55,7 @@ const config: Config = {
         xl: "10px",
       },
       ringOffsetColor: {
-        DEFAULT: "rgb(var(--substrate) / <alpha-value>)",
+        DEFAULT: "#F2F0EC",
       },
       boxShadow: {
         panel: "0 1px 2px rgba(20, 22, 26, 0.04)",
@@ -76,15 +76,11 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
         },
-        shimmer: {
-          "100%": { transform: "translateX(100%)" },
-        },
       },
       animation: {
         "rise-in": "rise-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both",
         "cell-punch": "cell-punch 180ms ease-out",
         "led-pulse": "led-pulse 2.4s ease-in-out infinite",
-        shimmer: "shimmer 2s infinite",
       },
     },
   },

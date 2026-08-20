@@ -39,9 +39,9 @@ function SimCard({
   const atLimit = sim.sent_today >= DAILY_LIMIT_PER_SIM;
 
   return (
-    <Panel 
-      className={cn("group transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg", className)} 
-      style={style} 
+    <Panel
+      className={cn("group transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg", className)}
+      style={style}
       contentClassName="relative flex h-full flex-col p-5 bg-gradient-to-br from-card to-substrate overflow-hidden"
     >
       {/* Decorative Gold Chip */}

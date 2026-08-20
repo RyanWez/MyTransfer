@@ -24,11 +24,12 @@ export function ThemeToggle() {
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
       aria-label="Toggle theme"
       title={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+      className="text-ink-mute hover:text-ink transition-colors"
     >
       {resolvedTheme === "dark" ? (
-        <Sun className="h-4 w-4" strokeWidth={1.5} />
+        <Sun className="h-4 w-4 text-brass" strokeWidth={1.75} />
       ) : (
-        <Moon className="h-4 w-4" strokeWidth={1.5} />
+        <Moon className="h-4 w-4 text-ink-mute" strokeWidth={1.75} />
       )}
     </Button>
   );

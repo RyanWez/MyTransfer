@@ -49,7 +49,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
       <div
         onClick={onClose}
         className={cn(
-          "fixed inset-0 z-40 bg-ink/40 transition-opacity md:hidden",
+          "fixed inset-0 z-40 bg-black/60 transition-opacity md:hidden",
           open ? "opacity-100" : "pointer-events-none opacity-0"
         )}
         aria-hidden="true"
@@ -57,7 +57,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col bg-ink text-substrate transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col bg-[#121316] text-[#F2F0EC] border-r border-white/5 transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
           collapsed ? "w-20" : "w-60"
         )}
@@ -66,7 +66,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="absolute -right-3 top-12 z-50 hidden md:flex h-6 w-6 items-center justify-center rounded-full border border-hairline bg-card text-ink shadow-sm transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass"
+            className="absolute -right-3 top-12 z-50 hidden md:flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-[#1c1f26] text-white shadow-sm transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? (
@@ -79,7 +79,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
 
         <div className={cn("flex min-h-[70px] items-center border-b border-white/10", collapsed ? "justify-center px-2" : "justify-between px-5")}>
           <div className={cn("transition-opacity duration-200", collapsed ? "hidden opacity-0" : "opacity-100")}>
-            <div className="font-mono text-[15px] font-bold uppercase tracking-[0.16em]">
+            <div className="font-mono text-[15px] font-bold uppercase tracking-[0.16em] text-white">
               My<span className="text-brass">Share</span>
             </div>
           </div>
@@ -111,7 +111,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                 className={cn(
                   "relative flex items-center py-2.5 font-mono text-eyebrow font-semibold uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brass",
                   collapsed ? "justify-center px-0" : "gap-3 pl-5 pr-4",
-                  active ? "text-substrate" : "text-white/50 hover:text-white/85"
+                  active ? "text-white bg-white/[0.08]" : "text-white/50 hover:text-white/90 hover:bg-white/[0.03]"
                 )}
               >
                 {/* 2px brass marker instead of a filled block — the rail stays quiet. */}
@@ -134,7 +134,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
             <StatusDot tone={fleet?.active ? "signal" : "muted"} size="sm" />
             {!collapsed && (
               fleet ? (
-                <span className="tnum truncate">
+                <span className="tnum truncate text-white/70">
                   {fleet.active} of {fleet.total} SIMs active
                 </span>
               ) : (
