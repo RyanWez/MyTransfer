@@ -35,28 +35,36 @@ export default function HistoryPage() {
   const shown = rows.filter((r) => filter === "all" || r.status === filter);
 
   // Day groups carry the running total — the number an operator reconciles against.
+  // Bucketed and sorted here rather than trusting the incoming order: the query sorts
+  // by `id DESC`, which only matches time order while ids and timestamps agree. A log
+  // that can print the same date as two separate headings isn't worth reconciling against.
   const days = useMemo(() => {
-    const out: { key: string; label: string; rows: Transfer[]; sent: number; volume: number }[] = [];
+    const buckets = new Map<string, Transfer[]>();
     for (const t of shown) {
       const key = dayKey(t.created_at);
-      let group = out[out.length - 1];
-      if (!group || group.key !== key) {
-        group = { key, label: fmtDayHeader(t.created_at), rows: [], sent: 0, volume: 0 };
-        out.push(group);
-      }
-      group.rows.push(t);
-      if (t.status === "success") {
-        group.sent += 1;
-        group.volume += t.amount;
-      }
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(t);
+      else buckets.set(key, [t]);
     }
-    return out;
+    return [...buckets.values()]
+      .map((rows) => {
+        const ordered = [...rows].sort((a, b) => b.created_at - a.created_at);
+        const done = ordered.filter((t) => t.status === "success");
+        return {
+          key: dayKey(ordered[0].created_at),
+          label: fmtDayHeader(ordered[0].created_at),
+          rows: ordered,
+          sent: done.length,
+          volume: done.reduce((sum, t) => sum + t.amount, 0),
+        };
+      })
+      .sort((a, b) => b.rows[0].created_at - a.rows[0].created_at);
   }, [shown]);
 
   return (
     <div className="max-w-4xl space-y-5">
       <div className="flex items-center justify-between gap-4">
-        <span className="font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
+        <span className="whitespace-nowrap font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
           {shown.length} of {rows.length} {rows.length === 1 ? "attempt" : "attempts"}
         </span>
         <SegmentedControl
@@ -125,7 +133,10 @@ export default function HistoryPage() {
                         {fmtClock(t.created_at)}
                       </span>
 
-                      <span className="flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:basis-auto">
+                      {/* Narrow screens reorder to two lines — clock and money on the
+                          first, the phone pair on the second — so amounts stay in a
+                          single right-hand column instead of each row growing a third line. */}
+                      <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
                         <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
                         <ArrowRight
                           className="h-3 w-3 shrink-0 text-brass"
@@ -135,7 +146,7 @@ export default function HistoryPage() {
                         <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
                       </span>
 
-                      <span className="ml-auto shrink-0 text-right">
+                      <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
                         <span className="font-mono text-sm tnum text-brass-deep">
                           {fmtAmount(t.amount)}
                         </span>

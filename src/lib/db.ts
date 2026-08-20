@@ -159,8 +159,10 @@ export const dbApi = {
   },
 
   listTransfers(limit = 200): TransferRow[] {
+    // Ordered by time, not id: "recent" and the history log both mean most-recent-first,
+    // and the two only coincide while inserts happen in timestamp order. id breaks ties.
     return db
-      .prepare("SELECT * FROM transfers ORDER BY id DESC LIMIT ?")
+      .prepare("SELECT * FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?")
       .all(limit) as TransferRow[];
   },
 
