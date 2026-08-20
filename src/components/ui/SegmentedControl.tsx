@@ -14,6 +14,7 @@ export interface SegmentedControlProps<T extends string> {
   options: SegmentedOption<T>[];
   className?: string;
   "aria-label"?: string;
+  fullWidth?: boolean;
 }
 
 function SegmentedControl<T extends string>({
@@ -21,6 +22,7 @@ function SegmentedControl<T extends string>({
   onValueChange,
   options,
   className,
+  fullWidth,
   ...props
 }: SegmentedControlProps<T>) {
   return (
@@ -28,7 +30,8 @@ function SegmentedControl<T extends string>({
       role="tablist"
       aria-label={props["aria-label"]}
       className={cn(
-        "inline-flex items-center gap-px rounded border border-hairline bg-hairline p-px",
+        "flex items-center gap-px rounded border border-hairline bg-hairline p-px",
+        fullWidth ? "w-full" : "inline-flex",
         className
       )}
     >
@@ -44,7 +47,8 @@ function SegmentedControl<T extends string>({
             className={cn(
               "rounded-sm px-3 py-1.5 font-mono text-eyebrow font-semibold uppercase transition-colors duration-150",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink",
-              selected ? "bg-ink text-substrate" : "bg-card text-ink-mute hover:text-ink"
+              selected ? "bg-ink text-substrate" : "bg-card text-ink-mute hover:text-ink",
+              fullWidth && "flex-1"
             )}
           >
             {o.label}

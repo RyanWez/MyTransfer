@@ -16,6 +16,7 @@ import { Receipt, ReceiptRow, ReceiptDivider } from "@/components/Receipt";
 import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
 import { useNowSec } from "@/lib/useNowSec";
+import { useSessionState } from "@/lib/useSessionState";
 import type { Sim } from "@/lib/types";
 
 const QUICK = [500, 800, 1000, 5000];
@@ -34,16 +35,16 @@ interface Snapshot {
 export default function TransferPage() {
   const [sims, setSims] = useState<Sim[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [sender, setSender] = useState("");
-  const [receiver, setReceiver] = useState("");
-  const [amount, setAmount] = useState("");
-  const [otp, setOtp] = useState("");
+  const [sender, setSender] = useSessionState("transfer_sender", "");
+  const [receiver, setReceiver] = useSessionState("transfer_receiver", "");
+  const [amount, setAmount] = useSessionState("transfer_amount", "");
+  const [otp, setOtp] = useSessionState("transfer_otp", "");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [stage, setStage] = useState<"form" | "otp" | "done">("form");
+  const [stage, setStage] = useSessionState<"form" | "otp" | "done">("transfer_stage", "form");
   const [busy, setBusy] = useState(false);
-  const [receipt, setReceipt] = useState<Snapshot | null>(null);
-  const [resendAt, setResendAt] = useState(0);
+  const [receipt, setReceipt] = useSessionState<Snapshot | null>("transfer_receipt", null);
+  const [resendAt, setResendAt] = useSessionState("transfer_resendAt", 0);
 
   const nowSec = useNowSec();
   const cooldown = resendAt > 0 ? Math.max(0, resendAt - nowSec) : 0;

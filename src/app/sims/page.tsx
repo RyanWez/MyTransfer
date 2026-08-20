@@ -19,6 +19,8 @@ import {
 import { SimCard, SimCardSkeleton } from "@/components/SimCard";
 import { fmtKs, fmtPhoneGrouped, sameNumber } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
+import { useSessionState } from "@/lib/useSessionState";
+import { useNowSec } from "@/lib/useNowSec";
 import type { Sim } from "@/lib/types";
 
 type LoginMode = "otp" | "password";
@@ -31,17 +33,21 @@ export default function SimsPage() {
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [mode, setMode] = useState<LoginMode>("otp");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [password, setPassword] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
+  const [loginOpen, setLoginOpen] = useSessionState("login_open", false);
+  const [mode, setMode] = useSessionState<LoginMode>("login_mode", "otp");
+  const [phone, setPhone] = useSessionState("login_phone", "");
+  const [otp, setOtp] = useSessionState("login_otp", "");
+  const [password, setPassword] = useSessionState("login_password", "");
+  const [otpSent, setOtpSent] = useSessionState("login_otpSent", false);
   const [busy, setBusy] = useState(false);
-  const [flow, setFlow] = useState<Flow>("login");
+  const [flow, setFlow] = useSessionState<Flow>("login_flow", "login");
   // Only set on the register flow; v2/register/confirm needs it alongside the code.
-  const [reqId, setReqId] = useState<string | null>(null);
-  const [regSubId, setRegSubId] = useState<string | null>(null);
+  const [reqId, setReqId] = useSessionState<string | null>("login_reqId", null);
+  const [regSubId, setRegSubId] = useSessionState<string | null>("login_regSubId", null);
+  
+  const [loginResendAt, setLoginResendAt] = useSessionState("login_resendAt", 0);
+  const nowSec = useNowSec();
+  const cooldown = loginResendAt > 0 ? Math.max(0, loginResendAt - nowSec) : 0;
 
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
 
@@ -94,6 +100,7 @@ export default function SimsPage() {
         setFlow(r.flow === "register" ? "register" : "login");
         setReqId(r.reqId ?? null);
         setRegSubId(r.subscriptionId ?? null);
+        setLoginResendAt(Math.floor(Date.now() / 1000) + 30);
         toast.success("OTP sent", {
           description:
             r.flow === "register"
@@ -301,75 +308,85 @@ export default function SimsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <SegmentedControl
-            aria-label="Login method"
-            value={mode}
-            onValueChange={(v) => {
-              setMode(v);
-              setOtpSent(false);
-              setFlow("login");
-              setReqId(null);
-              setRegSubId(null);
-            }}
-            options={[
-              { value: "otp", label: "SMS code" },
-              { value: "password", label: "MyID password" },
-            ]}
-          />
-
-          <div className="space-y-4">
-            <Input
-              label="Phone number"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
-              disabled={mode === "otp" && otpSent}
-              placeholder="09XXXXXXXXX"
-              inputMode="numeric"
-              autoComplete="off"
-              className="font-mono"
+          <div className="space-y-5 mt-2">
+            <SegmentedControl
+              aria-label="Login method"
+              value={mode}
+              onValueChange={(v) => {
+                setMode(v);
+                setOtpSent(false);
+                setFlow("login");
+                setReqId(null);
+                setRegSubId(null);
+                setOtp("");
+                setPassword("");
+              }}
+              options={[
+                { value: "otp", label: "SMS code" },
+                { value: "password", label: "MyID password" },
+              ]}
+              fullWidth
+              className="w-full"
             />
 
-            {alreadyInTray && (
-              <p className="text-sm text-ink-mute">
-                {fmtPhoneGrouped(alreadyInTray.phone)} is already in the tray. Logging in again
-                replaces its stored token and keeps its place — no duplicate card, and its
-                transfer history is untouched.
-              </p>
-            )}
+            <div className="space-y-4">
+              <Input
+                label="Phone number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
+                disabled={mode === "otp" && otpSent}
+                placeholder="09XXXXXXXXX"
+                inputMode="numeric"
+                autoComplete="off"
+                className="font-mono"
+              />
 
-            {mode === "otp"
-              ? otpSent && (
-                  <div>
-                    <div className="mb-2 font-mono text-eyebrow font-semibold uppercase text-ink-mute">
-                      Code from SMS
+              {alreadyInTray && (
+                <p className="text-xs leading-relaxed text-ink-mute">
+                  {fmtPhoneGrouped(alreadyInTray.phone)} is already in the tray. Logging in again
+                  replaces its stored token and keeps its place — no duplicate card.
+                </p>
+              )}
+
+              {mode === "otp"
+                ? otpSent && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="mb-2 flex items-center justify-between font-mono text-eyebrow font-semibold uppercase text-ink-mute">
+                        <span>Code from SMS</span>
+                        {cooldown > 0 && <span className="text-ink-faint">resend in {cooldown}s</span>}
+                      </div>
+                      <div className="mt-1">
+                        <OtpInput value={otp} onChange={setOtp} autoFocus />
+                      </div>
+                      {flow === "register" && (
+                        <p className="mt-3 text-xs leading-relaxed text-ink-mute">
+                          This number has no MyID account. Entering the code opens one and logs it
+                          in — no need to visit the MyID app first.
+                        </p>
+                      )}
                     </div>
-                    <OtpInput value={otp} onChange={setOtp} autoFocus />
-                    {flow === "register" && (
-                      <p className="mt-2 text-sm text-ink-mute">
-                        This number has no MyID account. Entering the code opens one and logs it
-                        in — no need to visit the MyID app first.
-                      </p>
-                    )}
-                  </div>
-                )
-              : (
-                  <Input
-                    label="MyID password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                )}
+                  )
+                : (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                      <Input
+                        label="MyID password"
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                      />
+                    </div>
+                  )}
+            </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setLoginOpen(false)} disabled={busy}>
+          <DialogFooter className="mt-4 gap-2 sm:space-x-0">
+            <Button variant="ghost" onClick={() => setLoginOpen(false)} disabled={busy} className="sm:mr-auto">
               Cancel
             </Button>
             {mode === "otp" && otpSent && (
-              <Button variant="outline" onClick={requestOtp} disabled={busy}>
-                Resend
+              <Button variant="outline" onClick={requestOtp} disabled={busy || cooldown > 0}>
+                {cooldown > 0 ? `Resend (${cooldown}s)` : "Resend"}
               </Button>
             )}
             {mode === "otp" && !otpSent ? (
@@ -378,7 +395,7 @@ export default function SimsPage() {
               </Button>
             ) : (
               <Button onClick={doLogin} loading={busy} disabled={!phone || !canSubmit}>
-                {mode === "otp" && flow === "register" ? "Open account & log in" : "Log in"}
+                {mode === "otp" && flow === "register" ? "Open account" : "Log in"}
               </Button>
             )}
           </DialogFooter>
