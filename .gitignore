@@ -7,3 +7,9 @@ data/
 *.db-shm
 .env*.local
 next-env.d.ts
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Claude Code local (machine-specific permissions)
+.claude/settings.local.json
