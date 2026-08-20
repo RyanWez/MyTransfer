@@ -59,6 +59,14 @@
   .tnum {
     font-variant-numeric: tabular-nums;
   }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 /* Warm, unobtrusive scrollbars — this is a dense console, the chrome shouldn't shout. */

@@ -131,6 +131,7 @@ const stmtAddTransfer = db.prepare(
 );
 const stmtGetTransferById = db.prepare("SELECT * FROM transfers WHERE id = ?");
 const stmtListTransfers = db.prepare("SELECT * FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?");
+const stmtDeleteTransfer = db.prepare("DELETE FROM transfers WHERE id = ?");
 
 const stmtTodayCountBySender = db.prepare(
   `SELECT sender_phone, COUNT(*) as cnt
@@ -241,6 +242,10 @@ export const dbApi = {
 
   listTransfers(limit = 200): TransferRow[] {
     return stmtListTransfers.all(limit) as TransferRow[];
+  },
+
+  deleteTransfer(id: number) {
+    stmtDeleteTransfer.run(id);
   },
 
   /**

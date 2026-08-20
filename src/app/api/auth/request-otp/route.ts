@@ -129,6 +129,12 @@ async function sendRegisterOtp(msisdn: string): Promise<OtpAttempt> {
 }
 
 function finish(msisdn: string, attempt: OtpAttempt) {
+  // Diagnostic: one line per outbound SMS attempt — count these in the dev terminal
+  // while a SIM logs in. More than 1 ok line per click = our code double-fired;
+  // exactly 1 but two SMS on the phone = Mytel sent a duplicate itself.
+  console.log(
+    `[request-otp] ${new Date().toISOString()} phone=${msisdn} path=${attempt.flow} ok=${attempt.ok} errorCode=${attempt.errorCode ?? "-"} msg=${attempt.message ?? "-"}`
+  );
   if (attempt.ok) {
     lastOtpAt.set(msisdn, Date.now());
     // Re-logging in a SIM that is already working must not knock it back to

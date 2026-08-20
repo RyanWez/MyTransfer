@@ -2,11 +2,20 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, ChevronRight, ScrollText, Search, X } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { toast } from "sonner";
 import {
   dayKey,
   fmtAmount,
@@ -43,6 +52,8 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState<number>(10);
   const [page, setPage] = useState(1);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     fetchHistory()
@@ -119,6 +130,29 @@ export default function HistoryPage() {
   function handlePageSizeChange(size: number) {
     setPageSize(size);
     setPage(1);
+  }
+
+  async function confirmDelete() {
+    if (!deleteId) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch("/api/history", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteId }),
+      }).then((r) => r.json());
+      if (res.ok) {
+        setRows((r) => r.filter((x) => x.id !== deleteId));
+        toast.success("Record deleted");
+      } else {
+        toast.error("Failed to delete", { description: res.error });
+      }
+    } catch {
+      toast.error("Network error");
+    } finally {
+      setIsDeleting(false);
+      setDeleteId(null);
+    }
   }
 
   return (
@@ -235,44 +269,57 @@ export default function HistoryPage() {
                 const reason =
                   t.message ?? (t.error_code !== null ? `Error ${t.error_code}` : null);
                 return (
-                  <li key={t.id} className="px-4 py-3 transition-colors hover:bg-substrate">
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <StatusDot tone={badge.tone} size="sm" />
-                      <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
-                        {fmtClock(t.created_at)}
-                      </span>
+                  <li key={t.id} className="relative group p-0 m-0 border-0 bg-card overflow-hidden">
+                    <div className="flex w-full overflow-x-auto snap-x snap-mandatory scrollbar-none">
+                      <div className="w-full shrink-0 snap-start bg-card transition-colors group-hover:bg-substrate px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <StatusDot tone={badge.tone} size="sm" />
+                          <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
+                            {fmtClock(t.created_at)}
+                          </span>
 
-                      {/* Narrow screens reorder to two lines — clock and money on the
-                          first, the phone pair on the second — so amounts stay in a
-                          single right-hand column instead of each row growing a third line. */}
-                      <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
-                        <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
-                        <ArrowRight
-                          className="h-3 w-3 shrink-0 text-brass"
-                          strokeWidth={2}
-                          aria-hidden="true"
-                        />
-                        <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
-                      </span>
+                          {/* Narrow screens reorder to two lines — clock and money on the
+                              first, the phone pair on the second — so amounts stay in a
+                              single right-hand column instead of each row growing a third line. */}
+                          <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
+                            <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
+                            <ArrowRight
+                              className="h-3 w-3 shrink-0 text-brass"
+                              strokeWidth={2}
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
+                          </span>
 
-                      <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
-                        <span className="font-mono text-sm tnum text-brass-deep">
-                          {fmtAmount(t.amount)}
-                        </span>
-                        <span className="ml-2 font-mono text-xs tnum text-ink-faint">
-                          +{fmtAmount(t.fee)} fee
-                        </span>
-                      </span>
-                    </div>
+                          <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
+                            <span className="font-mono text-sm tnum text-brass-deep">
+                              {fmtAmount(t.amount)}
+                            </span>
+                            <span className="ml-2 font-mono text-xs tnum text-ink-faint">
+                              +{fmtAmount(t.fee)} fee
+                            </span>
+                          </span>
+                        </div>
 
-                    {failed && reason && (
-                      <div className="mt-1.5 pl-[18px] text-xs text-alert-deep">{reason}</div>
-                    )}
-                    {!failed && t.status !== "success" && (
-                      <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">
-                        {badge.label}
+                        {failed && reason && (
+                          <div className="mt-1.5 pl-[18px] text-xs text-alert-deep">{reason}</div>
+                        )}
+                        {!failed && t.status !== "success" && (
+                          <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">
+                            {badge.label}
+                          </div>
+                        )}
                       </div>
-                    )}
+                      
+                      <button
+                        onClick={() => setDeleteId(t.id)}
+                        className="w-[84px] shrink-0 snap-end bg-alert text-white flex flex-col items-center justify-center transition-colors hover:bg-alert-deep focus:outline-none"
+                        title="Delete record"
+                      >
+                        <Trash2 className="h-5 w-5 mb-1" />
+                        <span className="text-[10px] font-mono uppercase">Delete</span>
+                      </button>
+                    </div>
                   </li>
                 );
               })}
@@ -361,6 +408,22 @@ export default function HistoryPage() {
           )}
         </div>
       )}
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete record?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove the transfer record from the history log. Are you sure you want to proceed?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteId(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" loading={isDeleting} onClick={confirmDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
