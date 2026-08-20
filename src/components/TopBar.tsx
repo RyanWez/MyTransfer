@@ -35,8 +35,10 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
           <h1 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-ink">
             {page.title}
           </h1>
+          {/* Hidden rather than truncated on narrow screens — a subtitle clipped
+              mid-word reads as a layout fault, and the title already says enough. */}
           {page.sub && (
-            <p className="mt-0.5 truncate text-xs text-ink-mute">{page.sub}</p>
+            <p className="mt-0.5 hidden truncate text-xs text-ink-mute sm:block">{page.sub}</p>
           )}
         </div>
 

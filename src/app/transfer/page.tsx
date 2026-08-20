@@ -74,6 +74,9 @@ export default function TransferPage() {
   const selected = sims.find((s) => s.phone === sender);
   const senderBalance = selected?.balance ?? null;
   const activeSims = sims.filter((s) => s.status === "active");
+  // Pickable SIMs first. Unusable ones still render — so it's clear why a SIM is
+  // missing — but they belong after the choices, not above them.
+  const orderedSims = [...activeSims, ...sims.filter((s) => s.status !== "active")];
   const amt = Number(amount);
   const fee = Number.isFinite(amt) ? Math.round(amt * 0.05) : 0;
   const total = amt + fee;
@@ -227,7 +230,7 @@ export default function TransferPage() {
       <section>
         <Eyebrow>From</Eyebrow>
         <div className="mt-2.5 flex flex-wrap gap-2.5">
-          {sims.map((s) => (
+          {orderedSims.map((s) => (
             <SimChip
               key={s.phone}
               sim={s}

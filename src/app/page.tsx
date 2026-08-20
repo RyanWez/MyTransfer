@@ -134,13 +134,15 @@ export default function DashboardPage() {
                 return (
                   <li
                     key={t.id}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-substrate"
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-substrate"
                   >
                     <StatusDot tone={badge.tone} size="sm" />
                     <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
                       {fmtClock(t.created_at)}
                     </span>
-                    <span className="flex min-w-0 flex-1 items-center gap-2 font-mono text-xs tnum text-ink-soft">
+                    {/* Same two-line reflow as the history log, so a row reads the
+                        same way in both places instead of eliding the numbers. */}
+                    <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
                       <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
                       <ArrowRight
                         className="h-3 w-3 shrink-0 text-brass"
@@ -149,7 +151,7 @@ export default function DashboardPage() {
                       />
                       <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
                     </span>
-                    <span className="shrink-0 font-mono text-sm tnum text-brass-deep">
+                    <span className="order-2 ml-auto shrink-0 font-mono text-sm tnum text-brass-deep sm:order-none">
                       {fmtAmount(t.amount)}
                     </span>
                   </li>
