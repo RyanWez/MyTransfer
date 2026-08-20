@@ -162,7 +162,9 @@ export async function checkAccount(phone: string): Promise<AccountState> {
     return { kind: "unknown", errorCode: data?.errorCode, message: data?.message };
   }
 
-  const ok = data != null && data.errorCode >= 200 && data.errorCode < 300;
+  // apiOk (not a bare 2xx range) — the endpoint also answers 0 on success, and
+  // missing it here sends fresh numbers down the wrong OTP path below.
+  const ok = data != null && apiOk(data.errorCode);
   if (!ok || !data?.result) {
     return { kind: "unknown", errorCode: data?.errorCode, message: data?.message };
   }

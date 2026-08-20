@@ -244,7 +244,7 @@ export default function TransferPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-7">
-      <Stepper steps={STEPS} current={stage === "otp" ? 1 : 0} className="max-w-sm" />
+      <Stepper steps={STEPS} current={stage === "otp" ? 1 : 0} className="w-full" />
 
       {/* Sender */}
       <section>
