@@ -21,13 +21,13 @@ const buttonVariants = cva(
         link: "text-ink-soft underline-offset-4 hover:text-ink hover:underline",
       },
       size: {
-        default: "h-9 px-4 text-sm",
-        sm: "h-8 px-3 text-xs",
-        lg: "h-11 px-6 text-sm",
-        xl: "h-12 px-8 text-base",
-        icon: "h-9 w-9",
+        default: "h-12 px-4 sm:h-9 sm:px-4 text-base sm:text-sm",
+        sm: "h-10 px-3 sm:h-8 sm:px-3 text-sm sm:text-xs",
+        lg: "h-14 px-6 sm:h-11 sm:px-6 text-base sm:text-sm",
+        xl: "h-14 px-8 sm:h-12 sm:px-8 text-base",
+        icon: "h-12 w-12 sm:h-9 sm:w-9",
         // Dense card footers, where a 36px target next to an 11px label reads heavy.
-        "icon-sm": "h-8 w-8",
+        "icon-sm": "h-10 w-10 sm:h-8 sm:w-8",
       },
     },
     defaultVariants: {

@@ -186,11 +186,20 @@ export default function TransferPage() {
   if (loaded && activeSims.length === 0 && stage === "form") {
     return (
       <EmptyState
-        icon={<SquareStack className="h-7 w-7" strokeWidth={1.25} />}
+        icon={
+          <div className="relative w-24 h-24 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+            <div className="absolute inset-0 bg-gradient-to-br from-brass-soft/20 to-transparent rounded-2xl animate-pulse" />
+            <div className="absolute -inset-2 bg-substrate rounded-3xl opacity-50 dark:opacity-10 blur-xl" />
+            <div className="relative w-16 h-20 bg-card border border-hairline shadow-xl rounded-md flex flex-col p-2 notch-lg rotate-12 transition-transform duration-500 hover:rotate-6">
+              <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-substrate to-transparent" />
+              <SquareStack className="h-6 w-6 text-ink-mute m-auto z-10" strokeWidth={1.5} />
+            </div>
+          </div>
+        }
         title="No SIM is logged in"
         body="A transfer needs a logged-in sender SIM — its OTP is what authorises the debit."
         action={
-          <Button asChild>
+          <Button asChild className="shadow-md transition-transform hover:scale-105 active:scale-95">
             <Link href="/sims">
               Log in a SIM
               <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />

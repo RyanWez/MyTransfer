@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, Search, SquareStack, X } from "lucide-react";
+import { Cpu, Plus, Search, SquareStack, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
@@ -259,11 +259,28 @@ export default function SimsPage() {
         </div>
       ) : loaded && sims.length === 0 ? (
         <EmptyState
-          icon={<SquareStack className="h-7 w-7" strokeWidth={1.25} />}
+          icon={
+            <div className="relative w-24 h-24 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+              <div className="absolute inset-0 bg-gradient-to-tr from-brass-soft/20 to-transparent rounded-2xl animate-pulse" />
+              <div className="absolute -inset-2 bg-substrate rounded-3xl opacity-50 dark:opacity-10 blur-xl" />
+              <div className="relative w-16 h-20 bg-card border border-hairline shadow-xl rounded-md flex flex-col p-2 notch-lg rotate-12 transition-transform duration-500 hover:rotate-6">
+                <div className="absolute right-1 top-4 w-4 h-4 text-brass-deep/20">
+                  <Cpu className="w-full h-full" strokeWidth={1.5} />
+                </div>
+                <div className="mt-auto flex gap-1">
+                  <div className="w-3 h-1 bg-hairline rounded-full" />
+                  <div className="w-2 h-1 bg-hairline rounded-full" />
+                </div>
+              </div>
+              <div className="absolute -bottom-2 -left-2 w-12 h-16 bg-substrate border border-hairline shadow-lg rounded-md notch-sm -rotate-6 flex items-center justify-center">
+                <SquareStack className="h-5 w-5 text-ink-mute" strokeWidth={1.5} />
+              </div>
+            </div>
+          }
           title="The tray is empty"
           body="Log in a Mytel SIM with an SMS code or its MyID password to read balances and send transfers."
           action={
-            <Button onClick={() => openLogin()} className="transition-transform hover:scale-105 active:scale-95">
+            <Button onClick={() => openLogin()} className="transition-transform hover:scale-105 active:scale-95 shadow-md">
               <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
               Log in a SIM
             </Button>
@@ -271,7 +288,14 @@ export default function SimsPage() {
         />
       ) : loaded && filteredSims.length === 0 ? (
         <EmptyState
-          icon={<Search className="h-7 w-7" strokeWidth={1.25} />}
+          icon={
+            <div className="relative w-24 h-24 flex items-center justify-center">
+              <div className="absolute inset-0 bg-substrate rounded-full opacity-50 blur-lg" />
+              <div className="relative w-16 h-16 bg-card border border-hairline rounded-full flex items-center justify-center shadow-inner">
+                <Search className="h-7 w-7 text-ink-mute animate-pulse" strokeWidth={1.5} />
+              </div>
+            </div>
+          }
           title="No matching SIMs"
           body={`No SIMs found matching "${searchQuery}". Try a different phone number or note.`}
           action={

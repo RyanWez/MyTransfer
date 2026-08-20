@@ -12,6 +12,16 @@
   --hairline: #dcd8d1;
 }
 
+.dark {
+  --substrate: #14161a;
+  --card: #1d1f24;
+  --ink: #f2f0ec;
+  --brass: #d9b15e;
+  --signal: #00e074;
+  --alert: #ff5247;
+  --hairline: #33363d;
+}
+
 @layer base {
   body {
     background: var(--substrate);
@@ -23,7 +33,12 @@
 
   ::selection {
     background: #f5eedd;
-    color: var(--ink);
+    color: #14161a;
+  }
+  
+  .dark ::selection {
+    background: #473919;
+    color: #fbfaf8;
   }
 
   /* Numbers in this app are read in columns. Keep them aligned everywhere. */

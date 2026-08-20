@@ -103,7 +103,7 @@ function OtpInput({
             autoComplete={i === 0 ? "one-time-code" : "off"}
             aria-label={`Digit ${i + 1} of ${length}`}
             className={cn(
-              "h-16 w-full min-w-0 rounded border bg-card text-center font-mono text-otp text-ink",
+              "h-16 w-full min-w-0 sm:h-14 rounded border bg-card text-center font-mono text-otp text-ink",
               "transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ink focus:ring-offset-2",
               "disabled:bg-substrate disabled:text-ink-faint",
               filled ? "border-ink" : "border-hairline hover:border-hairline-strong",

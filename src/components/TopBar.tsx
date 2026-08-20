@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const PAGES: Record<string, { title: string; sub: string }> = {
   "/": { title: "Overview", sub: "Balances, daily capacity, and today's transfers" },
@@ -42,14 +43,17 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
           )}
         </div>
 
-        {pathname !== "/transfer" && (
-          <Button asChild size="sm" className="shrink-0">
-            <Link href="/transfer">
-              <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-              New transfer
-            </Link>
-          </Button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <ThemeToggle />
+          {pathname !== "/transfer" && (
+            <Button asChild size="sm">
+              <Link href="/transfer">
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                New transfer
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
     </header>
   );

@@ -45,7 +45,7 @@ function SegmentedControl<T extends string>({
             aria-selected={selected}
             onClick={() => onValueChange(o.value)}
             className={cn(
-              "rounded-sm px-3 py-1.5 font-mono text-eyebrow font-semibold uppercase transition-colors duration-150",
+              "rounded-sm px-3 py-2 sm:py-1.5 h-10 sm:h-8 flex items-center justify-center font-mono text-eyebrow font-semibold uppercase transition-colors duration-150",
               "focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ink",
               selected ? "bg-ink text-substrate" : "bg-card text-ink-mute hover:text-ink",
               fullWidth && "flex-1"

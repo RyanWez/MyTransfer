@@ -314,11 +314,25 @@ export default function HistoryPage() {
       {loaded && rows.length === 0 && (
         <div className="rounded border border-hairline bg-card">
           <EmptyState
-            icon={<ScrollText className="h-7 w-7" strokeWidth={1.25} />}
+            icon={
+              <div className="relative w-24 h-24 flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
+                <div className="absolute inset-0 bg-gradient-to-bl from-brass-soft/20 to-transparent rounded-2xl animate-pulse" />
+                <div className="absolute -inset-2 bg-substrate rounded-3xl opacity-50 dark:opacity-10 blur-xl" />
+                <div className="relative w-16 h-20 bg-card border border-hairline shadow-xl rounded-md flex flex-col p-2 rotate-6 transition-transform duration-500 hover:-rotate-6">
+                  <div className="absolute top-0 right-0 w-4 h-4 bg-hairline rounded-bl-md" />
+                  <ScrollText className="h-6 w-6 text-ink-mute m-auto" strokeWidth={1.5} />
+                  <div className="mt-auto space-y-1">
+                    <div className="w-8 h-1 bg-hairline rounded-full" />
+                    <div className="w-6 h-1 bg-hairline rounded-full" />
+                    <div className="w-10 h-1 bg-hairline rounded-full" />
+                  </div>
+                </div>
+              </div>
+            }
             title="Nothing sent yet"
             body="Every transfer this console attempts lands here — successes and failures alike, with the reason."
             action={
-              <Button asChild>
+              <Button asChild className="shadow-md transition-transform hover:scale-105 active:scale-95">
                 <Link href="/transfer">
                   Start a transfer
                   <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
@@ -332,7 +346,14 @@ export default function HistoryPage() {
       {loaded && rows.length > 0 && filtered.length === 0 && (
         <div className="rounded border border-hairline bg-card">
           <EmptyState
-            icon={<Search className="h-7 w-7" strokeWidth={1.25} />}
+            icon={
+              <div className="relative w-24 h-24 flex items-center justify-center">
+                <div className="absolute inset-0 bg-substrate rounded-full opacity-50 blur-lg" />
+                <div className="relative w-16 h-16 bg-card border border-hairline rounded-full flex items-center justify-center shadow-inner">
+                  <Search className="h-7 w-7 text-ink-mute animate-pulse" strokeWidth={1.5} />
+                </div>
+              </div>
+            }
             title="No transfers match your search"
             body={
               searchQuery.trim()
