@@ -53,6 +53,39 @@ export interface BalanceInfo {
   mainAmount: number;
 }
 
+const DEFAULT_TIMEOUT_MS = 12000;
+
+/** Fetch with built-in timeout to prevent server thread blocking when Mytel API hangs. */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error(`Request timeout after ${timeoutMs}ms: ${url}`));
+  }, timeoutMs);
+
+  if (options.signal) {
+    options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason));
+  }
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return res;
+  } catch (error: any) {
+    if (error.name === "AbortError" || controller.signal.aborted) {
+      throw new Error(`Mytel API request timed out (${timeoutMs / 1000}s). Network may be unstable.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function headers(token?: string): Record<string, string> {
   const h: Record<string, string> = {
     "Accept-Language": "EN",
@@ -111,7 +144,7 @@ export type AccountState =
 /** `GET v2/login/action/check-account` — does this number have a usable MyID account? */
 export async function checkAccount(phone: string): Promise<AccountState> {
   const url = `${AUTH_BASE}v2/login/action/check-account?phoneNumber=${encodeURIComponent(phone)}`;
-  const res = await fetch(url, { method: "GET", headers: headers() });
+  const res = await fetchWithTimeout(url, { method: "GET", headers: headers() });
   const text = await res.text();
 
   let data: ApiResult<{ id?: string; myid?: string; verify?: boolean }> | null = null;
@@ -156,7 +189,7 @@ export interface RegisterRequestResult {
 export async function requestRegisterOtp(
   msisdn: string
 ): Promise<ApiResult<RegisterRequestResult>> {
-  const res = await fetch(`${AUTH_BASE}v2/register/request`, {
+  const res = await fetchWithTimeout(`${AUTH_BASE}v2/register/request`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({ msisdn }),
@@ -185,7 +218,7 @@ export async function confirmRegister(
     appVersion: DEVICE.appVersion,
     buildVersionApp: DEVICE.buildVersionApp,
   };
-  const res = await fetch(`${AUTH_BASE}v2/register/confirm`, {
+  const res = await fetchWithTimeout(`${AUTH_BASE}v2/register/confirm`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(body),
@@ -196,7 +229,7 @@ export async function confirmRegister(
 /** Step 1 of OTP login: ask Mytel to SMS a 6-digit OTP to the SIM. */
 export async function requestLoginOtp(phone: string): Promise<ApiResult> {
   const url = `${AUTH_BASE}login/method/otp/get-otp?phoneNumber=${encodeURIComponent(phone)}`;
-  const res = await fetch(url, { method: "GET", headers: headers() });
+  const res = await fetchWithTimeout(url, { method: "GET", headers: headers() });
   return json<ApiResult>(res);
 }
 
@@ -206,7 +239,7 @@ export async function loginWithOtp(
   otp: string
 ): Promise<ApiResult<LoginResult>> {
   const body = { phoneNumber: phone, password: otp, ...DEVICE };
-  const res = await fetch(`${AUTH_BASE}login/method/otp/validate-otp`, {
+  const res = await fetchWithTimeout(`${AUTH_BASE}login/method/otp/validate-otp`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(body),
@@ -220,7 +253,7 @@ export async function loginWithPassword(
   password: string
 ): Promise<ApiResult<LoginResult>> {
   const body = { phoneNumber: phone, password, ...DEVICE };
-  const res = await fetch(`${AUTH_BASE}login/method/password`, {
+  const res = await fetchWithTimeout(`${AUTH_BASE}login/method/password`, {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify(body),
@@ -238,7 +271,7 @@ export async function refreshAccessToken(
     client_secret: CLIENT_SECRET,
     refresh_token: refreshToken,
   });
-  const res = await fetch(KEYCLOAK_TOKEN, {
+  const res = await fetchWithTimeout(KEYCLOAK_TOKEN, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: form.toString(),
@@ -255,7 +288,7 @@ export async function refreshAccessToken(
 export async function listSubscriptions(
   token: string
 ): Promise<Subscription[]> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${API_BASE}/csm/v1.0/api/individual/subscription?limit=10&offset=0`,
     { headers: headers(token) }
   );
@@ -272,7 +305,7 @@ export async function getBalance(
   const url = `${API_BASE}/account-detail/api/v1.2/individual/account-main?isdn=${encodeURIComponent(
     msisdn
   )}&language=EN`;
-  const res = await fetch(url, { headers: headers(token) });
+  const res = await fetchWithTimeout(url, { headers: headers(token) });
   const data = await json<ApiResult<unknown>>(res);
   if (data.errorCode !== 0) return null;
   // Response shape: result: [ { msisdn, subId, mainBalance: { main: { amount } } } ]
@@ -298,7 +331,7 @@ export async function requestTransferOtp(
   token: string,
   subscriptionId: string
 ): Promise<ApiResult> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${API_BASE}/csm/v1.0/api/individual/subscription/${encodeURIComponent(
       subscriptionId
     )}/verify`,
@@ -321,7 +354,7 @@ export async function registerMyShare(
     receiverMsisdn,
     otpCode: otp,
   };
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${API_BASE}/csm/v1.0/api/vas-package/MyShare/register`,
     {
       method: "POST",

@@ -28,12 +28,18 @@ export async function persistLogin(
   let subscriptionId: string | null = subscriptionIdHint ?? null;
   let balance: number | null = null;
   try {
-    const subs = await listSubscriptions(lr.access_token);
-    const mine = subs.find((s) => normalizeMsisdn(s.isdn) === msisdn) ?? subs[0];
-    if (mine) {
-      subscriptionId = mine.id;
-      const bal = await getBalance(lr.access_token, normalizeMsisdn(mine.isdn));
+    if (subscriptionId) {
+      // If subscriptionId is already known from registration/check, read balance directly
+      const bal = await getBalance(lr.access_token, msisdn);
       if (bal) balance = bal.mainAmount;
+    } else {
+      const subs = await listSubscriptions(lr.access_token);
+      const mine = subs.find((s) => normalizeMsisdn(s.isdn) === msisdn) ?? subs[0];
+      if (mine) {
+        subscriptionId = mine.id;
+        const bal = await getBalance(lr.access_token, normalizeMsisdn(mine.isdn));
+        if (bal) balance = bal.mainAmount;
+      }
     }
   } catch {
     // non-fatal: balance can be refreshed later
