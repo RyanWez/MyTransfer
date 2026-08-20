@@ -3,9 +3,91 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0f172a;
+  --substrate: #f2f0ec;
+  --card: #fbfaf8;
+  --ink: #14161a;
+  --brass: #c89b3c;
+  --signal: #00c566;
+  --alert: #ff3b30;
+  --hairline: #dcd8d1;
 }
 
-body {
-  background: #f1f5f9;
+@layer base {
+  body {
+    background: var(--substrate);
+    color: var(--ink);
+    font-family: var(--font-sans), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: #f5eedd;
+    color: var(--ink);
+  }
+
+  /* Numbers in this app are read in columns. Keep them aligned everywhere. */
+  input[inputmode="numeric"],
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  /* The signature: a SIM card's clipped corner. Panel stacks two of these —
+     an outer filled `hairline`, an inner inset 1px filled `card` — because
+     clip-path removes the border along the diagonal. */
+  .notch {
+    --notch-size: 14px;
+    clip-path: polygon(
+      0 0,
+      calc(100% - var(--notch-size)) 0,
+      100% var(--notch-size),
+      100% 100%,
+      0 100%
+    );
+  }
+
+  .notch-sm {
+    --notch-size: 10px;
+  }
+
+  .notch-lg {
+    --notch-size: 20px;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Warm, unobtrusive scrollbars — this is a dense console, the chrome shouldn't shout. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #c7c2b9 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #c7c2b9;
+  border: 3px solid var(--substrate);
+  border-radius: 6px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #a9ada5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
