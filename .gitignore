@@ -5,6 +5,9 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+# Secrets — never commit these (AUTH_PASSWORD etc.)
+.env
+.env.*
 .env*.local
 next-env.d.ts
 

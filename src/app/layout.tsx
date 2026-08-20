@@ -28,8 +28,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body className="min-h-screen antialiased bg-substrate text-ink selection:bg-brass-soft selection:text-ink">
+    <html lang="en" suppressHydrationWarning className={`${sans.variable} ${mono.variable}`}>
+      <body className="min-h-screen antialiased bg-substrate text-ink selection:bg-brass-wash selection:text-ink">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
         </ThemeProvider>

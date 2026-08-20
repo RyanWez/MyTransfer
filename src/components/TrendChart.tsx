@@ -191,7 +191,7 @@ export function TrendChart({
                     x2={plotW}
                     y1={yAt(v)}
                     y2={yAt(v)}
-                    stroke={CHART_INK.grid}
+                    className="stroke-hairline"
                     strokeWidth={1}
                     shapeRendering="crispEdges"
                   />
@@ -268,7 +268,7 @@ export function TrendChart({
                   x2={xAt(hover)}
                   y1={0}
                   y2={plotH}
-                  stroke={CHART_INK.axis}
+                  className="stroke-hairline-strong"
                   strokeWidth={1}
                   shapeRendering="crispEdges"
                 />
@@ -285,7 +285,7 @@ export function TrendChart({
                     cy={pt.y}
                     r={4}
                     fill={p.color}
-                    stroke={CHART_INK.surface}
+                    className="stroke-card"
                     strokeWidth={2}
                     style={{ opacity: armed ? 1 : 0, transition: "opacity 300ms ease-out 700ms" }}
                   />
