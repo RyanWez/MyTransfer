@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Plus, SquareStack } from "lucide-react";
+import { Plus, Search, SquareStack, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
@@ -28,6 +28,7 @@ export default function SimsPage() {
   const [sims, setSims] = useState<Sim[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [loginOpen, setLoginOpen] = useState(false);
   const [mode, setMode] = useState<LoginMode>("otp");
@@ -56,6 +57,16 @@ export default function SimsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const filteredSims = useMemo(() => {
+    if (!searchQuery.trim()) return sims;
+    const q = searchQuery.toLowerCase().replace(/[\s-+]/g, "");
+    return sims.filter((s) => {
+      const phoneClean = s.phone.toLowerCase().replace(/[\s-+]/g, "");
+      const noteMatch = s.note ? s.note.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+      return phoneClean.includes(q) || noteMatch;
+    });
+  }, [sims, searchQuery]);
 
   function openLogin(prefill?: string) {
     setPhone(prefill ?? "");
@@ -187,15 +198,45 @@ export default function SimsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
-          {sims.length} {sims.length === 1 ? "SIM" : "SIMs"} ·{" "}
-          {sims.filter((s) => s.status === "active").length} active
+          {searchQuery.trim() ? (
+            <>
+              {filteredSims.length} of {sims.length} {sims.length === 1 ? "SIM" : "SIMs"}
+            </>
+          ) : (
+            <>
+              {sims.length} {sims.length === 1 ? "SIM" : "SIMs"} ·{" "}
+              {sims.filter((s) => s.status === "active").length} active
+            </>
+          )}
         </span>
-        <Button variant="secondary" size="sm" onClick={() => openLogin()}>
-          <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-          Log in a SIM
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-44 sm:w-60">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search SIM or note..."
+              className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-hairline-strong focus:outline-none focus:ring-1 focus:ring-ink"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => openLogin()} className="shrink-0">
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            Log in a SIM
+          </Button>
+        </div>
       </div>
 
       {loaded && sims.length === 0 ? (
@@ -212,9 +253,22 @@ export default function SimsPage() {
             }
           />
         </div>
+      ) : loaded && filteredSims.length === 0 ? (
+        <div className="rounded border border-hairline bg-card">
+          <EmptyState
+            icon={<Search className="h-7 w-7" strokeWidth={1.25} />}
+            title="No matching SIMs"
+            body={`No SIMs found matching "${searchQuery}". Try a different phone number or note.`}
+            action={
+              <Button variant="outline" size="sm" onClick={() => setSearchQuery("")}>
+                Clear search
+              </Button>
+            }
+          />
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {sims.map((s, i) => (
+          {filteredSims.map((s, i) => (
             <SimCard
               key={s.id}
               sim={s}
