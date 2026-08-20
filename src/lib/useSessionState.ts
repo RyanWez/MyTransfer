@@ -1,21 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 /**
  * Similar to useState, but persists the state to sessionStorage so it survives browser reloads.
- * The state is tied to the current tab and clears when the tab is closed.
+ * Avoids SSR hydration mismatches by initializing with initialValue and loading from sessionStorage on mount.
  */
 export function useSessionState<T>(key: string, initialValue: T) {
-  const [state, setState] = useState<T>(() => {
-    if (typeof window === "undefined") return initialValue;
-    try {
-      const stored = sessionStorage.getItem(key);
-      return stored ? JSON.parse(stored) : initialValue;
-    } catch {
-      return initialValue;
-    }
-  });
+  const [state, setState] = useState<T>(initialValue);
+  const isHydrated = useRef(false);
 
   useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(key);
+      if (stored !== null) {
+        setState(JSON.parse(stored));
+      }
+    } catch {}
+    isHydrated.current = true;
+  }, [key]);
+
+  useEffect(() => {
+    if (!isHydrated.current) return;
     try {
       if (state === undefined) {
         sessionStorage.removeItem(key);
@@ -27,3 +31,4 @@ export function useSessionState<T>(key: string, initialValue: T) {
 
   return [state, setState] as const;
 }
+
