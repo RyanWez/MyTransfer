@@ -17,6 +17,12 @@ const DEVICE = {
   buildVersionApp: "311",
 };
 
+// The register-confirm body is built differently from the login body in the app:
+// eu/c.java passes Build.BRAND (field f31885f) as `version` there, while the login
+// bodies pass the Android release string (f31883c). Mirrored verbatim so our request
+// looks like a real client's.
+const DEVICE_BRAND = "samsung";
+
 const CLIENT_ID = "superapp-client";
 const CLIENT_SECRET = "a2d5a415-1c9f-421d-84d4-5f6e0e814752";
 
@@ -75,7 +81,117 @@ async function json<T>(res: Response): Promise<T> {
   }
 }
 
+/**
+ * The app's `BaseResponse.isSucess()` is `200 <= errorCode < 300`, but the csm/*
+ * endpoints answer with 0 instead. Both count as success.
+ */
+export function apiOk(errorCode: number | undefined): boolean {
+  if (errorCode === undefined) return false;
+  return errorCode === 0 || (errorCode >= 200 && errorCode < 300);
+}
+
 // ---------- Login ----------
+
+/**
+ * Where a number stands with MyID, which decides whether it can log in at all.
+ *
+ * Mirrors the app's routing in `input_phone/p.java`: a verified account goes to the
+ * login screen, anything else goes to the V2 "create account" screen — which is why
+ * a fresh SIM can never get past `login/method/otp/*`.
+ */
+export type AccountState =
+  | { kind: "verified"; myid: string | null; subscriptionId: string | null }
+  /** Account row exists but was never verified — the app still re-registers these. */
+  | { kind: "unverified" }
+  /** HTTP 400 "Dont have account" — never touched MyID. */
+  | { kind: "missing" }
+  /** Anything unexpected; callers should fall back rather than block the user. */
+  | { kind: "unknown"; errorCode?: number; message?: string };
+
+/** `GET v2/login/action/check-account` — does this number have a usable MyID account? */
+export async function checkAccount(phone: string): Promise<AccountState> {
+  const url = `${AUTH_BASE}v2/login/action/check-account?phoneNumber=${encodeURIComponent(phone)}`;
+  const res = await fetch(url, { method: "GET", headers: headers() });
+  const text = await res.text();
+
+  let data: ApiResult<{ id?: string; myid?: string; verify?: boolean }> | null = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return { kind: "unknown", message: `Non-JSON response (${res.status})` };
+  }
+
+  // The app keys off the 400 body text, not the status alone.
+  if (res.status === 400) {
+    if ((data?.message ?? "").toLowerCase().includes("dont have account")) {
+      return { kind: "missing" };
+    }
+    return { kind: "unknown", errorCode: data?.errorCode, message: data?.message };
+  }
+
+  const ok = data != null && data.errorCode >= 200 && data.errorCode < 300;
+  if (!ok || !data?.result) {
+    return { kind: "unknown", errorCode: data?.errorCode, message: data?.message };
+  }
+  if (data.result.verify !== true) return { kind: "unverified" };
+  return {
+    kind: "verified",
+    myid: data.result.myid ?? null,
+    subscriptionId: data.result.id ?? null,
+  };
+}
+
+export interface RegisterRequestResult {
+  /** Opaque handle that must be echoed back with the OTP on confirm. */
+  reqId: string;
+  msisdn?: string;
+  haveMytelpayAccount?: boolean;
+  individualSubscription?: { id?: string; myid?: string; subType?: string; verify?: boolean };
+}
+
+/**
+ * Step 1 of first-time signup: `POST v2/register/request` with nothing but the number.
+ * Sends the same 6-digit SMS as a login OTP; calling it again is the app's "resend".
+ */
+export async function requestRegisterOtp(
+  msisdn: string
+): Promise<ApiResult<RegisterRequestResult>> {
+  const res = await fetch(`${AUTH_BASE}v2/register/request`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({ msisdn }),
+  });
+  return json<ApiResult<RegisterRequestResult>>(res);
+}
+
+/**
+ * Step 2 of first-time signup: `POST v2/register/confirm` creates the MyID account and
+ * returns the same token payload as a login, so one OTP both registers and signs in.
+ */
+export async function confirmRegister(
+  msisdn: string,
+  reqId: string,
+  otp: string
+): Promise<ApiResult<LoginResult>> {
+  const body = {
+    msisdn,
+    reqId,
+    otp,
+    imei: DEVICE.imei,
+    deviceId: DEVICE.deviceId,
+    os: DEVICE.os,
+    osApp: DEVICE.osApp,
+    version: DEVICE_BRAND,
+    appVersion: DEVICE.appVersion,
+    buildVersionApp: DEVICE.buildVersionApp,
+  };
+  const res = await fetch(`${AUTH_BASE}v2/register/confirm`, {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(body),
+  });
+  return json<ApiResult<LoginResult>>(res);
+}
 
 /** Step 1 of OTP login: ask Mytel to SMS a 6-digit OTP to the SIM. */
 export async function requestLoginOtp(phone: string): Promise<ApiResult> {

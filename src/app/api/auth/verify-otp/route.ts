@@ -1,57 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  loginWithOtp,
-  listSubscriptions,
-  getBalance,
-  normalizeMsisdn,
-} from "@/lib/mytel";
-import { dbApi } from "@/lib/db";
+import { loginWithOtp, confirmRegister, normalizeMsisdn, apiOk } from "@/lib/mytel";
+import { persistLogin } from "@/lib/session";
 
+/**
+ * Turn the SMS code into stored tokens.
+ *
+ * `reqId` is present when /api/auth/request-otp routed the number through
+ * registration; that code has to go back to `v2/register/confirm`, which creates the
+ * MyID account and returns tokens in one step. Without a `reqId` this is an ordinary
+ * OTP login. The two codes are not interchangeable — each is bound to the call that
+ * sent it.
+ */
 export async function POST(req: NextRequest) {
-  const { phone, otp } = await req.json();
+  const { phone, otp, reqId, subscriptionId: hint } = await req.json();
   if (!phone || !otp)
     return NextResponse.json({ ok: false, error: "phone & otp required" }, { status: 400 });
 
   const msisdn = normalizeMsisdn(phone);
-  const result = await loginWithOtp(msisdn, otp);
+  const registering = typeof reqId === "string" && reqId.length > 0;
 
-  const ok = result.errorCode === 0 || (result.errorCode >= 200 && result.errorCode < 300);
-  if (!ok || !result.result?.access_token) {
+  const result = registering
+    ? await confirmRegister(msisdn, reqId, otp)
+    : await loginWithOtp(msisdn, otp);
+
+  if (!apiOk(result.errorCode) || !result.result?.access_token) {
     return NextResponse.json({
       ok: false,
+      registered: false,
       errorCode: result.errorCode,
-      message: result.message ?? "Login failed",
+      message:
+        result.message ?? (registering ? "Could not create the account" : "Login failed"),
     });
   }
 
-  const lr = result.result;
-  const nowSec = Math.floor(Date.now() / 1000);
+  const { subscriptionId, balance } = await persistLogin(
+    msisdn,
+    result.result,
+    typeof hint === "string" ? hint : null
+  );
 
-  // Find this number's subscription id + balance
-  let subscriptionId: string | null = null;
-  let balance: number | null = null;
-  try {
-    const subs = await listSubscriptions(lr.access_token);
-    const mine = subs.find((s) => normalizeMsisdn(s.isdn) === msisdn) ?? subs[0];
-    if (mine) {
-      subscriptionId = mine.id;
-      const bal = await getBalance(lr.access_token, normalizeMsisdn(mine.isdn));
-      if (bal) balance = bal.mainAmount;
-    }
-  } catch {
-    // non-fatal: balance can be refreshed later
-  }
-
-  dbApi.upsertSim(msisdn, {
-    access_token: lr.access_token,
-    refresh_token: lr.refresh_token,
-    token_expires_at: nowSec + (lr.expires_in ?? 300),
-    refresh_expires_at: nowSec + (lr.refresh_expires_in ?? 0),
-    subscription_id: subscriptionId,
+  return NextResponse.json({
+    ok: true,
+    // Lets the UI say "account created" rather than just "logged in".
+    registered: registering,
+    subscriptionId,
     balance,
-    balance_checked_at: balance !== null ? nowSec : null,
-    status: "active",
   });
-
-  return NextResponse.json({ ok: true, subscriptionId, balance });
 }

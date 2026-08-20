@@ -21,6 +21,8 @@ import { fmtKs, fmtPhoneGrouped } from "@/lib/format";
 import type { Sim } from "@/lib/types";
 
 type LoginMode = "otp" | "password";
+/** Which endpoint pair the SMS code belongs to — see /api/auth/request-otp. */
+type Flow = "login" | "register";
 
 export default function SimsPage() {
   const [sims, setSims] = useState<Sim[]>([]);
@@ -34,6 +36,10 @@ export default function SimsPage() {
   const [password, setPassword] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [flow, setFlow] = useState<Flow>("login");
+  // Only set on the register flow; v2/register/confirm needs it alongside the code.
+  const [reqId, setReqId] = useState<string | null>(null);
+  const [regSubId, setRegSubId] = useState<string | null>(null);
 
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
 
@@ -57,6 +63,9 @@ export default function SimsPage() {
     setPassword("");
     setOtpSent(false);
     setMode("otp");
+    setFlow("login");
+    setReqId(null);
+    setRegSubId(null);
     setLoginOpen(true);
   }
 
@@ -71,7 +80,15 @@ export default function SimsPage() {
       }).then((r) => r.json());
       if (r.ok) {
         setOtpSent(true);
-        toast.success("OTP sent", { description: `Read the code off ${fmtPhoneGrouped(phone)}.` });
+        setFlow(r.flow === "register" ? "register" : "login");
+        setReqId(r.reqId ?? null);
+        setRegSubId(r.subscriptionId ?? null);
+        toast.success("OTP sent", {
+          description:
+            r.flow === "register"
+              ? `No MyID account on this number yet — the code will open one. Read it off ${fmtPhoneGrouped(phone)}.`
+              : `Read the code off ${fmtPhoneGrouped(phone)}.`,
+        });
       } else {
         toast.error("Couldn't send the OTP", {
           description: r.message || "Check the number and try again.",
@@ -88,23 +105,31 @@ export default function SimsPage() {
     setBusy(true);
     try {
       const url = mode === "otp" ? "/api/auth/verify-otp" : "/api/auth/login-password";
-      const body = mode === "otp" ? { phone, otp } : { phone, password };
+      const body =
+        mode === "otp"
+          ? { phone, otp, reqId, subscriptionId: regSubId }
+          : { phone, password };
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }).then((r) => r.json());
       if (r.ok) {
-        toast.success(`${fmtPhoneGrouped(phone)} logged in`, {
-          description:
-            r.balance !== null && r.balance !== undefined
-              ? `Balance ${fmtKs(r.balance)}.`
-              : "Balance not read yet — use the refresh button on the card.",
-        });
+        toast.success(
+          r.registered
+            ? `${fmtPhoneGrouped(phone)} registered and logged in`
+            : `${fmtPhoneGrouped(phone)} logged in`,
+          {
+            description:
+              r.balance !== null && r.balance !== undefined
+                ? `Balance ${fmtKs(r.balance)}.`
+                : "Balance not read yet — use the refresh button on the card.",
+          }
+        );
         setLoginOpen(false);
         load();
       } else {
-        toast.error("Login failed", {
+        toast.error(flow === "register" ? "Couldn't open the account" : "Login failed", {
           description: r.message || r.error || "Check the code or password and try again.",
         });
       }
@@ -210,8 +235,8 @@ export default function SimsPage() {
           <DialogHeader>
             <DialogTitle>Log in a SIM</DialogTitle>
             <DialogDescription>
-              Mytel authorises this console with the SIM&apos;s own credentials. Nothing leaves this
-              machine.
+              Mytel authorises this console with the SIM&apos;s own credentials. A number with no
+              MyID account yet gets one opened by the same SMS code. Nothing leaves this machine.
             </DialogDescription>
           </DialogHeader>
 
@@ -221,6 +246,9 @@ export default function SimsPage() {
             onValueChange={(v) => {
               setMode(v);
               setOtpSent(false);
+              setFlow("login");
+              setReqId(null);
+              setRegSubId(null);
             }}
             options={[
               { value: "otp", label: "SMS code" },
@@ -247,6 +275,12 @@ export default function SimsPage() {
                       Code from SMS
                     </div>
                     <OtpInput value={otp} onChange={setOtp} autoFocus />
+                    {flow === "register" && (
+                      <p className="mt-2 text-sm text-ink-mute">
+                        This number has no MyID account. Entering the code opens one and logs it
+                        in — no need to visit the MyID app first.
+                      </p>
+                    )}
                   </div>
                 )
               : (
@@ -275,7 +309,7 @@ export default function SimsPage() {
               </Button>
             ) : (
               <Button onClick={doLogin} loading={busy} disabled={!phone || !canSubmit}>
-                Log in
+                {mode === "otp" && flow === "register" ? "Open account & log in" : "Log in"}
               </Button>
             )}
           </DialogFooter>

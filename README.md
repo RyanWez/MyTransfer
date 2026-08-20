@@ -40,6 +40,24 @@ npm run dev        # http://localhost:3100
 SQLite database at `data/dashboard.db` (auto-created). Stores SIM tokens and
 transfer history. **Tokens are sensitive — keep this folder private.**
 
+## Logging in a SIM
+
+`login/method/otp/*` only works for a number that already has a **verified** MyID
+account, so a SIM that has never opened the MyID app cannot log in through it. The
+dashboard therefore checks the number first, exactly like the app does:
+
+```
+GET  myid/authen/v1.0/v2/login/action/check-account?phoneNumber=<msisdn>
+  → 200, result.verify = true      → existing account   → login/method/otp/get-otp
+  → 200, result.verify = false     → needs registering  ─┐
+  → 400, message "Dont have account"                     ─┴→ v2/register/request
+```
+
+The registration path sends the same 6-digit SMS and returns a `reqId`; posting that
+`reqId` plus the code to `v2/register/confirm` creates the account **and** returns the
+usual token pair. One code, no detour through the MyID app. If the check itself is
+inconclusive the dashboard tries login first, then registration.
+
 ## Token lifecycle
 
 - Each SIM stores `access_token` + `refresh_token` + expiry.
