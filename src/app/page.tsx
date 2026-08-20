@@ -2,77 +2,179 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fmtKs } from "@/lib/format";
-
-interface Stats {
-  simCount: number;
-  loggedIn: number;
-  rows: { status: string; cnt: number; total: number }[];
-}
+import { ArrowRight, SquareStack } from "lucide-react";
+import { Eyebrow } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { StatusDot } from "@/components/ui/StatusDot";
+import { Button } from "@/components/ui/Button";
+import { MetricStrip } from "@/components/MetricStrip";
+import { fmtAmount, fmtClock, fmtPhoneGrouped, statusBadge } from "@/lib/format";
+import { DAILY_LIMIT_PER_SIM } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import type { Stats } from "@/lib/types";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     fetch("/api/stats")
       .then((r) => r.json())
       .then((d) => setStats(d.stats))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoaded(true));
   }, []);
 
-  const success = stats?.rows.find((r) => r.status === "success");
+  const sent = stats?.rows.find((r) => r.status === "success");
   const failed = stats?.rows.find((r) => r.status === "failed");
+  const sentCount = sent?.cnt ?? 0;
+  const capacity = (stats?.loggedIn ?? 0) * DAILY_LIMIT_PER_SIM;
+  const used = capacity ? Math.min(1, sentCount / capacity) : 0;
 
-  const cards = [
-    { label: "Total SIMs", value: stats ? String(stats.simCount) : "…", sub: "registered" },
-    { label: "Logged in", value: stats ? String(stats.loggedIn) : "…", sub: "active tokens" },
-    { label: "Transfers today", value: success ? String(success.cnt) : "0", sub: "successful" },
-    { label: "Volume today", value: success ? fmtKs(success.total) : "0 Ks", sub: "transferred" },
-    { label: "Failed today", value: failed ? String(failed.cnt) : "0", sub: "errors" },
-  ];
+  if (loaded && stats && stats.simCount === 0) {
+    return (
+      <EmptyState
+        icon={<SquareStack className="h-7 w-7" strokeWidth={1.25} />}
+        title="The tray is empty"
+        body="Log in a Mytel SIM to read its balance and start sending transfers."
+        action={
+          <Button asChild>
+            <Link href="/sims">
+              Log in a SIM
+              <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+            </Link>
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-800 mb-1">Dashboard</h1>
-      <p className="text-sm text-slate-500 mb-6">Today at a glance</p>
+    <div className="max-w-5xl space-y-8">
+      {/* The one number the operator opens this page for. */}
+      <section className="animate-rise-in">
+        <Eyebrow>Total available</Eyebrow>
+        <div className="mt-2 font-mono text-hero tnum text-brass-deep">
+          {stats ? fmtAmount(stats.totalBalance) : "—"}
+          {/* tracking-normal: the hero's negative tracking is a px value, so a small
+              child would inherit it as a much larger proportion. */}
+          <span className="ml-2 align-baseline text-lg font-normal tracking-normal text-ink-mute">
+            Ks
+          </span>
+        </div>
+        <p className="mt-1.5 text-sm text-ink-mute">
+          {stats ? (
+            <>
+              across {stats.loggedIn} active {stats.loggedIn === 1 ? "SIM" : "SIMs"} of{" "}
+              {stats.simCount} in the tray
+            </>
+          ) : (
+            "Reading the tray…"
+          )}
+        </p>
+      </section>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {cards.map((c) => (
-          <div key={c.label} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <div className="text-xs text-slate-500 mb-1">{c.label}</div>
-            <div className="text-2xl font-bold text-slate-800">{c.value}</div>
-            <div className="text-[11px] text-slate-400 mt-1">{c.sub}</div>
-          </div>
-        ))}
-      </div>
+      <section className="animate-rise-in [animation-delay:40ms]">
+        <MetricStrip
+          items={[
+            { label: "Sent today", value: String(sentCount) },
+            {
+              label: "Volume today",
+              value: sent ? fmtAmount(sent.total) : "0",
+              sub: "Ks, fees excluded",
+              // Brass means money — a zero isn't money worth pointing at.
+              tone: sent?.total ? "brass" : "muted",
+            },
+            {
+              label: "Failed today",
+              value: String(failed?.cnt ?? 0),
+              tone: failed?.cnt ? "alert" : "muted",
+            },
+            {
+              label: "Capacity left",
+              value: String(Math.max(0, capacity - sentCount)),
+              sub: `of ${capacity} transfers`,
+            },
+          ]}
+        />
 
-      <div className="mt-8 grid md:grid-cols-2 gap-4">
-        <Link
-          href="/transfer"
-          className="bg-slate-900 text-white rounded-xl p-6 hover:bg-slate-800 transition-colors"
-        >
-          <div className="text-3xl mb-2">💸</div>
-          <div className="font-semibold text-lg">Make a transfer</div>
-          <div className="text-sm text-slate-300 mt-1">
-            Pick a SIM, enter receiver &amp; amount, then confirm with OTP.
+        {/* The 5-per-SIM-per-day rule, drawn instead of described. */}
+        <div className="mt-3 flex items-center gap-3">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-hairline">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-500",
+                used >= 0.8 ? "bg-alert" : "bg-ink"
+              )}
+              style={{ width: `${used * 100}%` }}
+            />
           </div>
-        </Link>
-        <Link
-          href="/sims"
-          className="bg-white border border-slate-200 rounded-xl p-6 hover:border-slate-300 transition-colors"
-        >
-          <div className="text-3xl mb-2">📇</div>
-          <div className="font-semibold text-lg text-slate-800">Manage SIMs</div>
-          <div className="text-sm text-slate-500 mt-1">
-            Log in SIMs (OTP or password), check balances, refresh tokens.
-          </div>
-        </Link>
-      </div>
+          <span className="shrink-0 font-mono text-eyebrow uppercase tnum text-ink-mute">
+            {sentCount} of {capacity} daily transfers used
+          </span>
+        </div>
+      </section>
 
-      <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-        <strong>MyShare limits:</strong> 500–5,000 Ks per transfer · 5% fee · max 5
-        transfers per SIM per day. OTP is always sent to the <em>sender</em> SIM.
-      </div>
+      <section className="animate-rise-in [animation-delay:80ms]">
+        <div className="mb-3 flex items-baseline justify-between gap-4">
+          <Eyebrow>Recent</Eyebrow>
+          <Link
+            href="/history"
+            className="font-mono text-eyebrow font-semibold uppercase text-ink-mute underline-offset-4 transition-colors hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2"
+          >
+            Full history
+          </Link>
+        </div>
+
+        <div className="overflow-hidden rounded border border-hairline bg-card">
+          {stats?.recent.length ? (
+            <ul className="divide-y divide-hairline">
+              {stats.recent.map((t) => {
+                const badge = statusBadge(t.status);
+                return (
+                  <li
+                    key={t.id}
+                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-substrate"
+                  >
+                    <StatusDot tone={badge.tone} size="sm" />
+                    <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
+                      {fmtClock(t.created_at)}
+                    </span>
+                    <span className="flex min-w-0 flex-1 items-center gap-2 font-mono text-xs tnum text-ink-soft">
+                      <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
+                      <ArrowRight
+                        className="h-3 w-3 shrink-0 text-brass"
+                        strokeWidth={2}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
+                    </span>
+                    <span className="shrink-0 font-mono text-sm tnum text-brass-deep">
+                      {fmtAmount(t.amount)}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <EmptyState
+              title="No transfers yet"
+              body="Pick a SIM, enter a receiver and amount, and confirm with the OTP sent to the sender."
+              action={
+                <Button asChild size="sm" variant="secondary">
+                  <Link href="/transfer">Start a transfer</Link>
+                </Button>
+              }
+              className="py-12"
+            />
+          )}
+        </div>
+      </section>
+
+      <p className="max-w-xl text-xs leading-relaxed text-ink-faint">
+        MyShare limits: 500–5,000 Ks per transfer, 5% fee, {DAILY_LIMIT_PER_SIM} transfers per SIM
+        per day. The OTP always goes to the sender SIM.
+      </p>
     </div>
   );
 }
