@@ -7,6 +7,10 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, "dashboard.db"));
 db.pragma("journal_mode = WAL");
+db.pragma("synchronous = NORMAL");
+db.pragma("temp_store = MEMORY");
+db.pragma("cache_size = -64000");
+db.pragma("busy_timeout = 5000");
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS sims (
@@ -37,6 +41,12 @@ CREATE TABLE IF NOT EXISTS transfers (
   message TEXT,
   created_at INTEGER DEFAULT (strftime('%s','now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_transfers_created_status ON transfers(created_at, status);
+CREATE INDEX IF NOT EXISTS idx_transfers_created_id ON transfers(created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_transfers_sender ON transfers(sender_phone);
+CREATE INDEX IF NOT EXISTS idx_sims_status ON sims(status);
+CREATE INDEX IF NOT EXISTS idx_sims_updated ON sims(updated_at DESC);
 `);
 
 export interface SimRow {
@@ -108,6 +118,52 @@ function stepBucket(d: Date, granularity: Granularity) {
   else d.setDate(d.getDate() + 1);
 }
 
+// Pre-compiled prepared statements for hot queries to avoid repeated SQL AST compilation
+const stmtListSims = db.prepare("SELECT * FROM sims ORDER BY updated_at DESC");
+const stmtGetSim = db.prepare("SELECT * FROM sims WHERE phone = ?");
+const stmtGetSimById = db.prepare("SELECT * FROM sims WHERE id = ?");
+const stmtInsertSim = db.prepare("INSERT INTO sims (phone) VALUES (?)");
+const stmtDeleteSim = db.prepare("DELETE FROM sims WHERE phone = ?");
+
+const stmtAddTransfer = db.prepare(
+  `INSERT INTO transfers (sender_phone, receiver_phone, amount, fee, otp, status, error_code, message)
+   VALUES (@sender_phone, @receiver_phone, @amount, @fee, @otp, @status, @error_code, @message)`
+);
+const stmtGetTransferById = db.prepare("SELECT * FROM transfers WHERE id = ?");
+const stmtListTransfers = db.prepare("SELECT * FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?");
+
+const stmtTodayCountBySender = db.prepare(
+  `SELECT sender_phone, COUNT(*) as cnt
+   FROM transfers WHERE created_at >= ? AND status = 'success'
+   GROUP BY sender_phone`
+);
+
+const stmtRangeSeriesHour = db.prepare(
+  `SELECT strftime('${BUCKET_FORMAT.hour}', created_at, 'unixepoch', 'localtime') AS bucket,
+          SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS sent,
+          SUM(CASE WHEN status = 'failed'  THEN 1 ELSE 0 END) AS failed,
+          SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END) AS volume
+   FROM transfers
+   WHERE created_at >= ? AND created_at < ?
+   GROUP BY bucket`
+);
+
+const stmtRangeSeriesDay = db.prepare(
+  `SELECT strftime('${BUCKET_FORMAT.day}', created_at, 'unixepoch', 'localtime') AS bucket,
+          SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS sent,
+          SUM(CASE WHEN status = 'failed'  THEN 1 ELSE 0 END) AS failed,
+          SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END) AS volume
+   FROM transfers
+   WHERE created_at >= ? AND created_at < ?
+   GROUP BY bucket`
+);
+
+const stmtSimCount = db.prepare("SELECT COUNT(*) c FROM sims");
+const stmtActiveSimCount = db.prepare("SELECT COUNT(*) c FROM sims WHERE status = 'active'");
+const stmtActiveTotalBalance = db.prepare(
+  "SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'"
+);
+
 // Re-exported so server code has one import for both the DB and the limit; the
 // constant itself lives in lib/constants.ts because client components need it too
 // and must not pull better-sqlite3 into the browser bundle.
@@ -115,21 +171,21 @@ export { DAILY_LIMIT_PER_SIM } from "./constants";
 
 export const dbApi = {
   listSims(): SimRow[] {
-    return db.prepare("SELECT * FROM sims ORDER BY updated_at DESC").all() as SimRow[];
+    return stmtListSims.all() as SimRow[];
   },
 
   getSim(phone: string): SimRow | undefined {
-    return db.prepare("SELECT * FROM sims WHERE phone = ?").get(phone) as SimRow | undefined;
+    return stmtGetSim.get(phone) as SimRow | undefined;
   },
 
   getSimById(id: number): SimRow | undefined {
-    return db.prepare("SELECT * FROM sims WHERE id = ?").get(id) as SimRow | undefined;
+    return stmtGetSimById.get(id) as SimRow | undefined;
   },
 
   upsertSim(phone: string, fields: Partial<SimRow>): SimRow {
     const existing = this.getSim(phone);
     if (!existing) {
-      db.prepare("INSERT INTO sims (phone) VALUES (?)").run(phone);
+      stmtInsertSim.run(phone);
     }
     const sets: string[] = [];
     const vals: unknown[] = [];
@@ -148,7 +204,7 @@ export const dbApi = {
   },
 
   deleteSim(phone: string) {
-    db.prepare("DELETE FROM sims WHERE phone = ?").run(phone);
+    stmtDeleteSim.run(phone);
   },
 
   addTransfer(t: {
@@ -161,20 +217,13 @@ export const dbApi = {
     error_code?: number;
     message?: string;
   }): TransferRow {
-    const info = db
-      .prepare(
-        `INSERT INTO transfers (sender_phone, receiver_phone, amount, fee, otp, status, error_code, message)
-         VALUES (@sender_phone, @receiver_phone, @amount, @fee, @otp, @status, @error_code, @message)`
-      )
-      .run({
-        otp: null,
-        error_code: null,
-        message: null,
-        ...t,
-      });
-    return db
-      .prepare("SELECT * FROM transfers WHERE id = ?")
-      .get(info.lastInsertRowid) as TransferRow;
+    const info = stmtAddTransfer.run({
+      otp: null,
+      error_code: null,
+      message: null,
+      ...t,
+    });
+    return stmtGetTransferById.get(info.lastInsertRowid) as TransferRow;
   },
 
   updateTransfer(id: number, fields: Partial<TransferRow>) {
@@ -191,11 +240,7 @@ export const dbApi = {
   },
 
   listTransfers(limit = 200): TransferRow[] {
-    // Ordered by time, not id: "recent" and the history log both mean most-recent-first,
-    // and the two only coincide while inserts happen in timestamp order. id breaks ties.
-    return db
-      .prepare("SELECT * FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?")
-      .all(limit) as TransferRow[];
+    return stmtListTransfers.all(limit) as TransferRow[];
   },
 
   /**
@@ -203,13 +248,7 @@ export const dbApi = {
    * Drives the per-SIM "3 of 5 today" line and the dashboard capacity meter.
    */
   todayCountBySender(): Record<string, number> {
-    const rows = db
-      .prepare(
-        `SELECT sender_phone, COUNT(*) as cnt
-         FROM transfers WHERE created_at >= ? AND status = 'success'
-         GROUP BY sender_phone`
-      )
-      .all(startOfToday()) as { sender_phone: string; cnt: number }[];
+    const rows = stmtTodayCountBySender.all(startOfToday()) as { sender_phone: string; cnt: number }[];
     return Object.fromEntries(rows.map((r) => [r.sender_phone, r.cnt]));
   },
 
@@ -221,17 +260,8 @@ export const dbApi = {
    * would read as "nothing happened" rather than "hasn't happened yet".
    */
   rangeSeries(fromTs: number, toTs: number, granularity: Granularity): SeriesBucket[] {
-    const rows = db
-      .prepare(
-        `SELECT strftime('${BUCKET_FORMAT[granularity]}', created_at, 'unixepoch', 'localtime') AS bucket,
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS sent,
-                SUM(CASE WHEN status = 'failed'  THEN 1 ELSE 0 END) AS failed,
-                SUM(CASE WHEN status = 'success' THEN amount ELSE 0 END) AS volume
-         FROM transfers
-         WHERE created_at >= ? AND created_at < ?
-         GROUP BY bucket`
-      )
-      .all(fromTs, toTs) as { bucket: string; sent: number; failed: number; volume: number }[];
+    const query = granularity === "hour" ? stmtRangeSeriesHour : stmtRangeSeriesDay;
+    const rows = query.all(fromTs, toTs) as { bucket: string; sent: number; failed: number; volume: number }[];
 
     const byKey = new Map(rows.map((r) => [r.bucket, r]));
     const nowSec = now();
@@ -264,15 +294,9 @@ export const dbApi = {
 
   /** Tray-wide figures that don't depend on the selected date range. */
   trayStats() {
-    const simCount = (db.prepare("SELECT COUNT(*) c FROM sims").get() as { c: number }).c;
-    const loggedIn = (
-      db.prepare("SELECT COUNT(*) c FROM sims WHERE status = 'active'").get() as { c: number }
-    ).c;
-    const totalBalance = (
-      db
-        .prepare("SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'")
-        .get() as { c: number }
-    ).c;
+    const simCount = (stmtSimCount.get() as { c: number }).c;
+    const loggedIn = (stmtActiveSimCount.get() as { c: number }).c;
+    const totalBalance = (stmtActiveTotalBalance.get() as { c: number }).c;
     return { simCount, loggedIn, totalBalance, recent: this.listTransfers(5) };
   },
 };
