@@ -11,6 +11,15 @@ import { dbApi } from "@/lib/db";
 /** What the client must do with the code once it arrives. */
 type Flow = "login" | "register";
 
+// A code stays valid long enough that a second request inside this window can only
+// produce a wasted (and confusing) second SMS. In-memory: survives neither a restart
+// nor multiple workers, but it stops refresh/double-click double-sends on one server.
+const OTP_COOLDOWN_MS = 45_000;
+const lastOtpAt = new Map<string, number>();
+// One request-otp in flight per number at a time, so a double-click can't race two
+// sends past the cooldown check before either records itself.
+const inFlight = new Set<string>();
+
 /**
  * Send the SIM a 6-digit code, picking the right endpoint for the number.
  *
@@ -27,27 +36,55 @@ export async function POST(req: NextRequest) {
 
   const msisdn = normalizeMsisdn(phone);
 
-  let state;
+  if (inFlight.has(msisdn)) {
+    return NextResponse.json({
+      ok: false,
+      error: "Already sending a code to this number — give it a moment.",
+    });
+  }
+  inFlight.add(msisdn);
   try {
-    state = await checkAccount(msisdn);
-  } catch {
-    // Treat an unreachable check like an inconclusive one: try both paths below.
-    state = { kind: "unknown" as const };
-  }
+    const last = lastOtpAt.get(msisdn);
+    if (last) {
+      const waitSec = Math.ceil((last + OTP_COOLDOWN_MS - Date.now()) / 1000);
+      if (waitSec > 0) {
+        return NextResponse.json({
+          ok: false,
+          error: `An OTP was just sent — wait ${waitSec}s before requesting another.`,
+        });
+      }
+      lastOtpAt.delete(msisdn);
+    }
 
-  // A verified account can log in; everything else needs the account created first.
-  if (state.kind === "verified") {
-    return finish(msisdn, await sendLoginOtp(msisdn));
-  }
-  if (state.kind === "missing" || state.kind === "unverified") {
-    return finish(msisdn, await sendRegisterOtp(msisdn));
-  }
+    let state;
+    try {
+      state = await checkAccount(msisdn);
+    } catch {
+      // Treat an unreachable check like an inconclusive one: try both paths below.
+      state = { kind: "unknown" as const };
+    }
 
-  // Inconclusive check — don't strand the user. Try login, then registration.
-  const login = await sendLoginOtp(msisdn);
-  if (login.ok) return finish(msisdn, login);
-  const register = await sendRegisterOtp(msisdn);
-  return finish(msisdn, register.ok ? register : login);
+    // A verified account can log in; everything else needs the account created first.
+    if (state.kind === "verified") {
+      return finish(msisdn, await sendLoginOtp(msisdn));
+    }
+    if (state.kind === "missing" || state.kind === "unverified") {
+      return finish(msisdn, await sendRegisterOtp(msisdn));
+    }
+
+    // Inconclusive check — don't strand the user. Try registration FIRST: fresh numbers
+    // are the common reason for an inconclusive check, and get-otp on a number with no
+    // account can still SMS a code that validate-otp will never accept — trying login
+    // first is what produced two SMS per request.
+    const register = await sendRegisterOtp(msisdn);
+    if (register.ok) return finish(msisdn, register);
+    // Registration was rejected (e.g. the account is actually verified) — fall back to a
+    // login OTP so existing accounts are not stranded on an inconclusive check.
+    const login = await sendLoginOtp(msisdn);
+    return finish(msisdn, login.ok ? login : register);
+  } finally {
+    inFlight.delete(msisdn);
+  }
 }
 
 interface OtpAttempt {
@@ -93,6 +130,7 @@ async function sendRegisterOtp(msisdn: string): Promise<OtpAttempt> {
 
 function finish(msisdn: string, attempt: OtpAttempt) {
   if (attempt.ok) {
+    lastOtpAt.set(msisdn, Date.now());
     // Re-logging in a SIM that is already working must not knock it back to
     // "waiting for OTP": if the operator abandons the dialog, a perfectly valid
     // token would sit in the tray looking logged out.
