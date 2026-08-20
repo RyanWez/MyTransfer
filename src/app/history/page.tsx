@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ScrollText } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, ScrollText, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
@@ -15,14 +15,33 @@ import {
   fmtPhoneGrouped,
   statusBadge,
 } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { Transfer } from "@/lib/types";
 
 type Filter = "all" | "success" | "failed";
+
+const PAGE_SIZE = 15;
+
+function getPaginationRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+  if (current >= total - 3) {
+    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}
 
 export default function HistoryPage() {
   const [rows, setRows] = useState<Transfer[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     fetch("/api/history")
@@ -32,15 +51,40 @@ export default function HistoryPage() {
       .finally(() => setLoaded(true));
   }, []);
 
-  const shown = rows.filter((r) => filter === "all" || r.status === filter);
+  const filtered = useMemo(() => {
+    const q = searchQuery.toLowerCase().replace(/[\s-+]/g, "");
+    return rows.filter((r) => {
+      const statusMatch = filter === "all" || r.status === filter;
+      if (!statusMatch) return false;
+      if (!searchQuery.trim()) return true;
 
-  // Day groups carry the running total — the number an operator reconciles against.
-  // Bucketed and sorted here rather than trusting the incoming order: the query sorts
-  // by `id DESC`, which only matches time order while ids and timestamps agree. A log
-  // that can print the same date as two separate headings isn't worth reconciling against.
+      const senderClean = r.sender_phone.toLowerCase().replace(/[\s-+]/g, "");
+      const receiverClean = r.receiver_phone.toLowerCase().replace(/[\s-+]/g, "");
+      const msgMatch = r.message ? r.message.toLowerCase().includes(searchQuery.toLowerCase()) : false;
+      const amountMatch = String(r.amount).includes(searchQuery.trim());
+      const errorCodeMatch = r.error_code !== null ? String(r.error_code).includes(searchQuery.trim()) : false;
+
+      return (
+        senderClean.includes(q) ||
+        receiverClean.includes(q) ||
+        msgMatch ||
+        amountMatch ||
+        errorCodeMatch
+      );
+    });
+  }, [rows, filter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
+
   const days = useMemo(() => {
     const buckets = new Map<string, Transfer[]>();
-    for (const t of shown) {
+    for (const t of paginatedRows) {
       const key = dayKey(t.created_at);
       const bucket = buckets.get(key);
       if (bucket) bucket.push(t);
@@ -59,24 +103,71 @@ export default function HistoryPage() {
         };
       })
       .sort((a, b) => b.rows[0].created_at - a.rows[0].created_at);
-  }, [shown]);
+  }, [paginatedRows]);
+
+  function handleFilterChange(val: Filter) {
+    setFilter(val);
+    setPage(1);
+  }
+
+  function handleSearchChange(val: string) {
+    setSearchQuery(val);
+    setPage(1);
+  }
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size);
+    setPage(1);
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="whitespace-nowrap font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
-          {shown.length} of {rows.length} {rows.length === 1 ? "attempt" : "attempts"}
+          {searchQuery.trim() || filter !== "all" ? (
+            <>
+              {filtered.length} of {rows.length} {rows.length === 1 ? "attempt" : "attempts"}
+            </>
+          ) : (
+            <>
+              {rows.length} {rows.length === 1 ? "attempt" : "attempts"}
+            </>
+          )}
         </span>
-        <SegmentedControl
-          aria-label="Filter transfers"
-          value={filter}
-          onValueChange={setFilter}
-          options={[
-            { value: "all", label: "All" },
-            { value: "success", label: "Sent" },
-            { value: "failed", label: "Failed" },
-          ]}
-        />
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative w-44 sm:w-60">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search sender, receiver, error..."
+              className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-hairline-strong focus:outline-none focus:ring-1 focus:ring-ink"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <SegmentedControl
+            aria-label="Filter transfers"
+            value={filter}
+            onValueChange={handleFilterChange}
+            options={[
+              { value: "all", label: "All" },
+              { value: "success", label: "Sent" },
+              { value: "failed", label: "Failed" },
+            ]}
+          />
+        </div>
       </div>
 
       {loaded && rows.length === 0 && (
@@ -97,12 +188,29 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {loaded && rows.length > 0 && shown.length === 0 && (
+      {loaded && rows.length > 0 && filtered.length === 0 && (
         <div className="rounded border border-hairline bg-card">
           <EmptyState
-            title={filter === "failed" ? "No failures" : "Nothing sent"}
-            body={`No ${filter === "failed" ? "failed" : "successful"} transfers in the log. Switch the filter to see the rest.`}
-            className="py-12"
+            icon={<Search className="h-7 w-7" strokeWidth={1.25} />}
+            title="No transfers match your search"
+            body={
+              searchQuery.trim()
+                ? `No transfers found matching "${searchQuery}". Try searching by a different phone number or status.`
+                : `No ${filter === "failed" ? "failed" : "successful"} transfers in the log.`
+            }
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilter("all");
+                  setPage(1);
+                }}
+              >
+                Clear filter & search
+              </Button>
+            }
           />
         </div>
       )}
@@ -171,6 +279,87 @@ export default function HistoryPage() {
           </div>
         </section>
       ))}
+
+      {/* Pagination & Page Size Controls */}
+      {filtered.length > 0 && (
+        <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-5 sm:flex-row">
+          <div className="flex flex-wrap items-center gap-3 font-mono text-eyebrow uppercase tnum text-ink-mute">
+            <span>
+              Showing {(currentPage - 1) * pageSize + 1}–
+              {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} transfers
+            </span>
+            <span className="hidden text-hairline-strong sm:inline">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-ink-faint">Rows:</span>
+              {[10, 20, 50].map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => handlePageSizeChange(size)}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-mono text-xs transition-colors",
+                    pageSize === size
+                      ? "bg-ink font-semibold text-substrate shadow-sm"
+                      : "border border-hairline bg-card text-ink-mute hover:border-hairline-strong hover:bg-substrate hover:text-ink"
+                  )}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="secondary"
+                size="icon-sm"
+                disabled={currentPage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                aria-label="Previous page"
+                title="Previous page"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <div className="flex items-center gap-1">
+                {getPaginationRange(currentPage, totalPages).map((p, idx) =>
+                  p === "..." ? (
+                    <span key={`ellipsis-${idx}`} className="px-1.5 font-mono text-xs text-ink-faint">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={`page-${p}`}
+                      type="button"
+                      onClick={() => setPage(p)}
+                      className={cn(
+                        "h-8 min-w-[2rem] rounded px-2 font-mono text-xs font-medium transition-colors",
+                        currentPage === p
+                          ? "bg-ink text-substrate shadow-sm"
+                          : "border border-hairline bg-card text-ink hover:border-hairline-strong hover:bg-substrate"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <Button
+                variant="secondary"
+                size="icon-sm"
+                disabled={currentPage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
+                title="Next page"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
