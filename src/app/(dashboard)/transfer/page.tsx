@@ -274,7 +274,7 @@ export default function TransferPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               disabled={locked}
               placeholder="Search sender SIM..."
-              className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-hairline-strong focus:outline-none focus:ring-1 focus:ring-ink disabled:opacity-50"
+              className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass disabled:opacity-50"
             />
             {searchQuery && !locked && (
               <button

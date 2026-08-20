@@ -357,8 +357,8 @@ export function DateRangePicker({
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "flex h-8 items-center gap-2.5 rounded border border-hairline bg-card px-3 font-mono text-xs text-ink transition-all hover:border-hairline-strong focus:outline-none focus:ring-1 focus:ring-ink",
-          open && "border-hairline-strong ring-1 ring-ink"
+          "flex h-8 items-center gap-2.5 rounded border border-hairline bg-card px-3 font-mono text-xs text-ink transition-all hover:border-hairline-strong focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass",
+          open && "border-brass ring-1 ring-brass"
         )}
       >
         {value.from && value.to ? (

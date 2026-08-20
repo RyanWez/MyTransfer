@@ -104,9 +104,9 @@ function OtpInput({
             aria-label={`Digit ${i + 1} of ${length}`}
             className={cn(
               "h-16 w-full min-w-0 sm:h-14 rounded border bg-card text-center font-mono text-otp text-ink",
-              "transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-ink focus:ring-offset-2",
+              "transition-colors duration-150 focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass",
               "disabled:bg-substrate disabled:text-ink-faint",
-              filled ? "border-ink" : "border-hairline hover:border-hairline-strong",
+              filled ? "border-brass" : "border-hairline hover:border-hairline-strong",
               punch === i && "animate-cell-punch"
             )}
           />

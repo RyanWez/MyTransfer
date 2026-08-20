@@ -44,12 +44,12 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             className={cn(
               "flex h-12 sm:h-11 w-full rounded border bg-card px-3 text-base sm:text-sm text-ink placeholder:text-ink-faint",
               "transition-colors duration-150",
-              "focus:outline-none focus:ring-2 focus:ring-ink focus:ring-offset-2",
+              "focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass",
               "disabled:cursor-not-allowed disabled:bg-substrate disabled:text-ink-mute",
               iconLeft && "pl-10",
               (iconRight || suffix) && "pr-10",
               error
-                ? "border-alert focus:ring-alert"
+                ? "border-alert focus:border-alert focus:ring-alert"
                 : "border-hairline hover:border-hairline-strong",
               className
             )}
