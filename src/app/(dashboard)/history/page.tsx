@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,13 @@ import { fetchHistory } from "@/lib/api";
 import type { Transfer } from "@/lib/types";
 
 type Filter = "all" | "success" | "failed";
+
+function getInitialTodayRange(): DateRange {
+  const today = new Date();
+  const from = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime() / 1000);
+  const to = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime() / 1000);
+  return { from, to };
+}
 
 const PAGE_SIZE = 15;
 
@@ -150,6 +158,7 @@ function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDel
 export default function HistoryPage() {
   const [rows, setRows] = useState<Transfer[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange>(getInitialTodayRange);
   const [filter, setFilter] = useState<Filter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState<number>(10);
@@ -157,12 +166,17 @@ export default function HistoryPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    fetchHistory()
+  const loadData = useCallback(() => {
+    setLoaded(false);
+    fetchHistory(dateRange.from ?? undefined, dateRange.to ?? undefined)
       .then((transfers) => setRows(transfers))
       .catch(() => {})
       .finally(() => setLoaded(true));
-  }, []);
+  }, [dateRange]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const filtered = useMemo(() => {
     const trimmed = searchQuery.trim();
@@ -277,7 +291,15 @@ export default function HistoryPage() {
         </span>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative w-44 sm:w-60">
+          <DateRangePicker
+            value={dateRange}
+            onChange={(r) => {
+              setDateRange(r);
+              setPage(1);
+            }}
+          />
+
+          <div className="relative w-40 sm:w-56">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
             <input
               type="text"
@@ -329,15 +351,32 @@ export default function HistoryPage() {
                 </div>
               </div>
             }
-            title="Nothing sent yet"
-            body="Every transfer this console attempts lands here — successes and failures alike, with the reason."
+            title="No transfers for this period"
+            body={
+              dateRange.from
+                ? "No transfers found for the selected date range. Try selecting another range or All Time."
+                : "Every transfer this console attempts lands here — successes and failures alike, with the reason."
+            }
             action={
-              <Button asChild className="shadow-md transition-transform hover:scale-105 active:scale-95">
-                <Link href="/transfer">
-                  Start a transfer
-                  <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                </Link>
-              </Button>
+              dateRange.from ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDateRange({ from: null, to: null });
+                    setPage(1);
+                  }}
+                >
+                  View All Time
+                </Button>
+              ) : (
+                <Button asChild className="shadow-md transition-transform hover:scale-105 active:scale-95">
+                  <Link href="/transfer">
+                    Start a transfer
+                    <ArrowRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                  </Link>
+                </Button>
+              )
             }
           />
         </div>

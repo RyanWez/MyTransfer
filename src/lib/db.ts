@@ -131,6 +131,9 @@ const stmtAddTransfer = db.prepare(
 );
 const stmtGetTransferById = db.prepare("SELECT * FROM transfers WHERE id = ?");
 const stmtListTransfers = db.prepare("SELECT * FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?");
+const stmtListTransfersRange = db.prepare(
+  "SELECT * FROM transfers WHERE created_at >= ? AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT ?"
+);
 const stmtDeleteTransfer = db.prepare("DELETE FROM transfers WHERE id = ?");
 
 const stmtTodayCountBySender = db.prepare(
@@ -240,7 +243,10 @@ export const dbApi = {
     db.prepare(`UPDATE transfers SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
   },
 
-  listTransfers(limit = 200): TransferRow[] {
+  listTransfers(limit = 1000, fromTs?: number, toTs?: number): TransferRow[] {
+    if (fromTs !== undefined && toTs !== undefined) {
+      return stmtListTransfersRange.all(fromTs, toTs, limit) as TransferRow[];
+    }
     return stmtListTransfers.all(limit) as TransferRow[];
   },
 

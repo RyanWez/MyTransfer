@@ -66,12 +66,17 @@ export async function fetchSims(): Promise<Sim[]> {
 }
 
 /** Fetch transfer history with promise deduplication and short-term caching. */
-export async function fetchHistory(limit?: number): Promise<Transfer[]> {
-  const query = limit ? `?limit=${limit}` : "";
+export async function fetchHistory(from?: number, to?: number, limit?: number): Promise<Transfer[]> {
+  const params = new URLSearchParams();
+  if (from !== undefined) params.set("from", String(from));
+  if (to !== undefined) params.set("to", String(to));
+  if (limit !== undefined) params.set("limit", String(limit));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const key = `history:${from ?? "all"}:${to ?? "all"}:${limit ?? "def"}`;
   const data = await cachedFetch<{ ok: boolean; transfers: Transfer[] }>(
-    `history:${limit || "all"}`,
+    key,
     `/api/history${query}`,
-    3000
+    2500
   );
   return data.transfers ?? [];
 }

@@ -42,7 +42,7 @@ flyctl secrets set \
 
 ```bash
 flyctl deploy
-flyctl open          # → https://myshare-console.fly.dev
+flyctl open          # → https://myshare.fly.dev
 ```
 
 Every later deploy is just `flyctl deploy` (or wire up `flyctl deploy` in CI).
