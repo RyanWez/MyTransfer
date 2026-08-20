@@ -57,7 +57,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col bg-[#121316] text-[#F2F0EC] border-r border-white/5 transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex shrink-0 flex-col bg-[#1A1D28] text-[#F2F5FC] border-r border-hairline/50 transition-all duration-300 ease-in-out md:sticky md:top-0 md:h-screen md:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
           collapsed ? "w-20" : "w-60"
         )}

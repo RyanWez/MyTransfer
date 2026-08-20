@@ -4,37 +4,38 @@ import defaultTheme from "tailwindcss/defaultTheme";
 // "Graphite & brass" — a warm paper substrate under cool graphite ink, with brass
 // reserved for one job only: money. See the plan for the full rationale.
 const config: Config = {
+  darkMode: "class",
   content: ["./src/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
-        substrate: "#F2F0EC",
-        card: "#FBFAF8",
+        substrate: "rgb(var(--substrate) / <alpha-value>)",
+        card: "rgb(var(--card) / <alpha-value>)",
         ink: {
-          DEFAULT: "#14161A",
-          soft: "#4A4E56",
-          mute: "#7C818B",
-          faint: "#A9ADB5",
+          DEFAULT: "rgb(var(--ink) / <alpha-value>)",
+          soft: "rgb(var(--ink-soft) / <alpha-value>)",
+          mute: "rgb(var(--ink-mute) / <alpha-value>)",
+          faint: "rgb(var(--ink-faint) / <alpha-value>)",
         },
         // Money, and only money. Also the color of a SIM's contact pads.
         brass: {
-          DEFAULT: "#C89B3C",
-          deep: "#A87F28",
-          wash: "#F5EEDD",
+          DEFAULT: "rgb(var(--brass) / <alpha-value>)",
+          deep: "rgb(var(--brass-deep) / <alpha-value>)",
+          wash: "rgb(var(--brass-wash) / <alpha-value>)",
         },
         signal: {
-          DEFAULT: "#00C566",
-          deep: "#00A855",
-          wash: "#E2F7EC",
+          DEFAULT: "rgb(var(--signal) / <alpha-value>)",
+          deep: "rgb(var(--signal-deep) / <alpha-value>)",
+          wash: "rgb(var(--signal-wash) / <alpha-value>)",
         },
         alert: {
-          DEFAULT: "#FF3B30",
-          deep: "#DE2A20",
-          wash: "#FFE9E7",
+          DEFAULT: "rgb(var(--alert) / <alpha-value>)",
+          deep: "rgb(var(--alert-deep) / <alpha-value>)",
+          wash: "rgb(var(--alert-wash) / <alpha-value>)",
         },
         hairline: {
-          DEFAULT: "#DCD8D1",
-          strong: "#C7C2B9",
+          DEFAULT: "rgb(var(--hairline) / <alpha-value>)",
+          strong: "rgb(var(--hairline-strong) / <alpha-value>)",
         },
       },
       fontFamily: {

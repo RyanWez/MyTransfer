@@ -23,23 +23,23 @@
 }
 
 .dark {
-  --substrate: 15 17 21;
-  --card: 24 27 34;
-  --ink: 245 245 247;
-  --ink-soft: 200 204 214;
-  --ink-mute: 148 154 168;
-  --ink-faint: 105 112 128;
-  --brass: 230 186 78;
-  --brass-deep: 242 202 99;
-  --brass-wash: 46 37 18;
-  --signal: 16 185 129;
-  --signal-deep: 52 211 153;
-  --signal-wash: 15 41 30;
-  --alert: 239 68 68;
-  --alert-deep: 248 113 113;
-  --alert-wash: 51 21 21;
-  --hairline: 42 47 58;
-  --hairline-strong: 62 69 86;
+  --substrate: 34 38 52;
+  --card: 43 49 66;
+  --ink: 242 245 252;
+  --ink-soft: 196 204 222;
+  --ink-mute: 145 155 178;
+  --ink-faint: 102 112 136;
+  --brass: 240 196 86;
+  --brass-deep: 250 210 100;
+  --brass-wash: 62 53 28;
+  --signal: 34 197 94;
+  --signal-deep: 74 222 128;
+  --signal-wash: 26 54 40;
+  --alert: 244 63 94;
+  --alert-deep: 251 113 133;
+  --alert-wash: 58 26 34;
+  --hairline: 55 63 84;
+  --hairline-strong: 76 86 112;
 }
 
 @layer base {
