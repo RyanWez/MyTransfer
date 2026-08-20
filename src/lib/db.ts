@@ -70,6 +70,17 @@ export interface TransferRow {
 
 const now = () => Math.floor(Date.now() / 1000);
 
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return Math.floor(d.getTime() / 1000);
+};
+
+// Re-exported so server code has one import for both the DB and the limit; the
+// constant itself lives in lib/constants.ts because client components need it too
+// and must not pull better-sqlite3 into the browser bundle.
+export { DAILY_LIMIT_PER_SIM } from "./constants";
+
 export const dbApi = {
   listSims(): SimRow[] {
     return db.prepare("SELECT * FROM sims ORDER BY updated_at DESC").all() as SimRow[];
@@ -153,10 +164,23 @@ export const dbApi = {
       .all(limit) as TransferRow[];
   },
 
+  /**
+   * Successful transfers sent per SIM since midnight, keyed by sender phone.
+   * Drives the per-SIM "3 of 5 today" line and the dashboard capacity meter.
+   */
+  todayCountBySender(): Record<string, number> {
+    const rows = db
+      .prepare(
+        `SELECT sender_phone, COUNT(*) as cnt
+         FROM transfers WHERE created_at >= ? AND status = 'success'
+         GROUP BY sender_phone`
+      )
+      .all(startOfToday()) as { sender_phone: string; cnt: number }[];
+    return Object.fromEntries(rows.map((r) => [r.sender_phone, r.cnt]));
+  },
+
   todayStats() {
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    const ts = Math.floor(dayStart.getTime() / 1000);
+    const ts = startOfToday();
     const rows = db
       .prepare(
         `SELECT status, COUNT(*) as cnt, COALESCE(SUM(amount),0) as total
@@ -167,6 +191,20 @@ export const dbApi = {
     const loggedIn = (
       db.prepare("SELECT COUNT(*) c FROM sims WHERE status = 'active'").get() as { c: number }
     ).c;
-    return { rows, simCount, loggedIn };
+    const totalBalance = (
+      db
+        .prepare(
+          "SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'"
+        )
+        .get() as { c: number }
+    ).c;
+    return {
+      rows,
+      simCount,
+      loggedIn,
+      totalBalance,
+      perSimToday: this.todayCountBySender(),
+      recent: this.listTransfers(5),
+    };
   },
 };
