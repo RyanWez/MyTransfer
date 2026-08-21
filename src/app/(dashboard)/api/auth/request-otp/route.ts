@@ -90,12 +90,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (checkError) {
-      console.log(
-        `[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind} error=${checkError}`
-      );
-    } else {
-      console.log(`[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind}`);
+    if (process.env.NODE_ENV !== "production") {
+      if (checkError) {
+        console.log(
+          `[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind} error=${checkError}`
+        );
+      } else {
+        console.log(`[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind}`);
+      }
     }
 
     // Single SMS per request: never auto-fallback to a second endpoint.
@@ -164,12 +166,12 @@ function finish(msisdn: string, attempt: OtpAttempt) {
   if (!attempt.ok && attempt.message?.includes("msisdnReq")) {
     attempt.message = `Invalid phone number format (${msisdn}, ${msisdn.length} digits). Use 09XXXXXXXXX or 959XXXXXXXXX.`;
   }
-  // Diagnostic: one line per outbound SMS attempt — count these in the dev terminal
-  // while a SIM logs in. More than 1 ok line per click = our code double-fired;
-  // exactly 1 but two SMS on the phone = Mytel sent a duplicate itself.
-  console.log(
-    `[request-otp] ${new Date().toISOString()} phone=${msisdn} path=${attempt.flow} ok=${attempt.ok} errorCode=${attempt.errorCode ?? "-"} msg=${attempt.message ?? "-"}`
-  );
+  // Diagnostic (dev only): one line per outbound SMS attempt
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      `[request-otp] ${new Date().toISOString()} phone=${msisdn} path=${attempt.flow} ok=${attempt.ok} errorCode=${attempt.errorCode ?? "-"} msg=${attempt.message ?? "-"}`
+    );
+  }
   if (attempt.ok) {
     lastOtpAt.set(msisdn, Date.now());
     // Re-logging in a SIM that is already working must not knock it back to
