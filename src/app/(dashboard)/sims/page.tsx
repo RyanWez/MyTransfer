@@ -101,7 +101,7 @@ export default function SimsPage() {
         setFlow(r.flow === "register" ? "register" : "login");
         setReqId(r.reqId ?? null);
         setRegSubId(r.subscriptionId ?? null);
-        setLoginResendAt(Math.floor(Date.now() / 1000) + 30);
+        setLoginResendAt(Math.floor(Date.now() / 1000) + 45);
         toast.success("OTP sent", {
           description:
             r.flow === "register"
@@ -155,9 +155,18 @@ export default function SimsPage() {
         invalidateCache();
         load();
       } else {
-        toast.error(flow === "register" ? "Couldn't open the account" : "Login failed", {
-          description: r.message || r.error || "Check the code or password and try again.",
-        });
+        const msg = r.message || r.error || "Check the code or password and try again.";
+        const isNewCode =
+          r.errorCode === 401 || String(msg).toLowerCase().includes("new code");
+        if (flow !== "register" && isNewCode) {
+          toast.error("Login failed - Mytel sent a new code, please wait for second SMS", {
+            description: msg,
+          });
+        } else {
+          toast.error(flow === "register" ? "Couldn't open the account" : "Login failed", {
+            description: msg,
+          });
+        }
       }
     } catch (err: any) {
       toast.error("Network error", { description: err?.message || "The console couldn't reach Mytel. Try again." });

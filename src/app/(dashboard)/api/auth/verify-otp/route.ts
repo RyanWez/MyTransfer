@@ -35,12 +35,22 @@ export async function POST(req: NextRequest) {
     );
 
     if (!apiOk(result.errorCode) || !result.result?.access_token) {
+      const isUnauth =
+        result.errorCode === 401 ||
+        String(result.message ?? "")
+          .toLowerCase()
+          .includes("unauthorized");
+      // Mytel's login OTP sometimes auto-sends a second SMS after the first
+      // validate fails — second code is the valid one. Surface that clearly.
+      const friendly =
+        !registering && isUnauth
+          ? "Mytel sent a new code to your phone. Please wait for the second SMS and enter the new 6-digit code. (First code expired)"
+          : (result.message ?? (registering ? "Could not create the account" : "Login failed"));
       return NextResponse.json({
         ok: false,
         registered: false,
         errorCode: result.errorCode,
-        message:
-          result.message ?? (registering ? "Could not create the account" : "Login failed"),
+        message: friendly,
       });
     }
 
