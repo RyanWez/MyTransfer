@@ -36,6 +36,20 @@ export async function POST(req: NextRequest) {
 
   const msisdn = normalizeMsisdn(phone);
 
+  // Early validation: Myanmar numbers are 09XXXXXXXXX (11) -> 959XXXXXXXXX (12).
+  // 13 digits like 9596872446600 is an extra-digit typo and Mytel rejects it with
+  // "Validation failed for object='msisdnReq'".
+  if (!/^959\d{9}$/.test(msisdn)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Invalid phone number",
+        message: `“${phone}” doesn’t look like a Myanmar number. Use 09XXXXXXXXX (11 digits) or 959XXXXXXXXX (12 digits). You sent ${msisdn} (${msisdn.length} digits).`,
+      },
+      { status: 400 }
+    );
+  }
+
   if (inFlight.has(msisdn)) {
     return NextResponse.json({
       ok: false,
@@ -57,46 +71,48 @@ export async function POST(req: NextRequest) {
     }
 
     let state;
+    let checkError: string | null = null;
     try {
       state = await checkAccount(msisdn);
-    } catch {
-      // Treat an unreachable check like an inconclusive one: retry below.
+    } catch (e) {
+      checkError = (e as Error).message;
       state = { kind: "unknown" as const };
     }
 
-    // A flaky check-account is what drags known numbers into the double-SMS fallback:
-    // the retry almost always settles it, and the DB picks the path if it still won't.
+    // Retry once on flaky network — but never double-send SMS; one SMS per click only.
     if (state.kind === "unknown") {
       try {
         state = await checkAccount(msisdn);
-      } catch {
+        checkError = null;
+      } catch (e) {
+        checkError = (e as Error).message;
         state = { kind: "unknown" as const };
       }
     }
 
-    console.log(`[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind}`);
+    if (checkError) {
+      console.log(
+        `[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind} error=${checkError}`
+      );
+    } else {
+      console.log(`[request-otp] ${Date.now()} phone=${msisdn} check-account state=${state.kind}`);
+    }
 
-    // A verified account can log in; everything else needs the account created first.
+    // Single SMS per request: never auto-fallback to a second endpoint.
+    // A second SMS would invalidate the first OTP on Mytel's side, causing
+    // "enter first code -> Unauthorized, second code works" bug.
     if (state.kind === "verified") {
       return finish(msisdn, await sendLoginOtp(msisdn));
     }
     if (state.kind === "missing" || state.kind === "unverified") {
-      const reg = await sendRegisterOtp(msisdn);
-      if (reg.ok) return finish(msisdn, reg);
-      // Fallback: If registration was refused because account is already verified, try login OTP
-      return finish(msisdn, await sendLoginOtp(msisdn));
+      return finish(msisdn, await sendRegisterOtp(msisdn));
     }
 
-    // Default / Inconclusive account state:
-    // Try standard Login OTP first (fastest and standard path for existing SIMs)
-    const login = await sendLoginOtp(msisdn);
-    if (login.ok) return finish(msisdn, login);
-
-    // If login was rejected (e.g. fresh SIM needing registration), try Register OTP
-    const register = await sendRegisterOtp(msisdn);
-    if (register.ok) return finish(msisdn, register);
-
-    return finish(msisdn, login.message ? login : register);
+    // Inconclusive (unknown) — default to login (95% of SIMs are existing accounts).
+    // If this was actually a fresh number, login will fail with a clear message and
+    // the user can retry; the retry will re-check account and likely route correctly.
+    // Never auto-try register here — that would send 2 SMS and invalidate the first.
+    return finish(msisdn, await sendLoginOtp(msisdn));
   } finally {
     inFlight.delete(msisdn);
   }
@@ -144,6 +160,10 @@ async function sendRegisterOtp(msisdn: string): Promise<OtpAttempt> {
 }
 
 function finish(msisdn: string, attempt: OtpAttempt) {
+  // Translate Mytel's raw validation message into something the toast can show directly.
+  if (!attempt.ok && attempt.message?.includes("msisdnReq")) {
+    attempt.message = `Invalid phone number format (${msisdn}, ${msisdn.length} digits). Use 09XXXXXXXXX or 959XXXXXXXXX.`;
+  }
   // Diagnostic: one line per outbound SMS attempt — count these in the dev terminal
   // while a SIM logs in. More than 1 ok line per click = our code double-fired;
   // exactly 1 but two SMS on the phone = Mytel sent a duplicate itself.

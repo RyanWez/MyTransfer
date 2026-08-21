@@ -109,8 +109,13 @@ export default function SimsPage() {
               : `Read the code off ${fmtPhoneGrouped(phone)}.`,
         });
       } else {
-        toast.error("Couldn't send the OTP", {
-          description: r.message || r.error || "Check the number and try again.",
+        const raw = r.message || r.error || "Check the number and try again.";
+        const isMsisdnError =
+          raw.includes("msisdnReq") || raw.includes("Invalid phone number");
+        toast.error(isMsisdnError ? "Invalid phone number" : "Couldn't send the OTP", {
+          description: isMsisdnError
+            ? raw
+            : raw,
         });
       }
     } catch (err: any) {
