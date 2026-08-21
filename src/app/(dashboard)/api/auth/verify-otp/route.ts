@@ -12,38 +12,50 @@ import { persistLogin } from "@/lib/session";
  * sent it.
  */
 export async function POST(req: NextRequest) {
-  const { phone, otp, reqId, subscriptionId: hint } = await req.json();
-  if (!phone || !otp)
-    return NextResponse.json({ ok: false, error: "phone & otp required" }, { status: 400 });
+  try {
+    const { phone, otp, reqId, subscriptionId: hint } = await req.json();
+    if (!phone || !otp)
+      return NextResponse.json({ ok: false, error: "phone & otp required" }, { status: 400 });
 
-  const msisdn = normalizeMsisdn(phone);
-  const registering = typeof reqId === "string" && reqId.length > 0;
+    const msisdn = normalizeMsisdn(phone);
+    const registering = typeof reqId === "string" && reqId.length > 0;
 
-  const result = registering
-    ? await confirmRegister(msisdn, reqId, otp)
-    : await loginWithOtp(msisdn, otp);
+    const result = registering
+      ? await confirmRegister(msisdn, reqId, otp)
+      : await loginWithOtp(msisdn, otp);
 
-  if (!apiOk(result.errorCode) || !result.result?.access_token) {
+    if (!apiOk(result.errorCode) || !result.result?.access_token) {
+      return NextResponse.json({
+        ok: false,
+        registered: false,
+        errorCode: result.errorCode,
+        message:
+          result.message ?? (registering ? "Could not create the account" : "Login failed"),
+      });
+    }
+
+    const { subscriptionId, balance } = await persistLogin(
+      msisdn,
+      result.result,
+      typeof hint === "string" ? hint : null
+    );
+
     return NextResponse.json({
-      ok: false,
-      registered: false,
-      errorCode: result.errorCode,
-      message:
-        result.message ?? (registering ? "Could not create the account" : "Login failed"),
+      ok: true,
+      // Lets the UI say "account created" rather than just "logged in".
+      registered: registering,
+      subscriptionId,
+      balance,
     });
+  } catch (err: any) {
+    console.error("[verify-otp] Error:", err);
+    return NextResponse.json(
+      {
+        ok: false,
+        errorCode: -1,
+        message: err?.message || "Failed to reach Mytel server",
+      },
+      { status: 502 }
+    );
   }
-
-  const { subscriptionId, balance } = await persistLogin(
-    msisdn,
-    result.result,
-    typeof hint === "string" ? hint : null
-  );
-
-  return NextResponse.json({
-    ok: true,
-    // Lets the UI say "account created" rather than just "logged in".
-    registered: registering,
-    subscriptionId,
-    balance,
-  });
 }

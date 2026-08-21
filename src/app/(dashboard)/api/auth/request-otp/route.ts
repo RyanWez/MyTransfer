@@ -81,32 +81,22 @@ export async function POST(req: NextRequest) {
       return finish(msisdn, await sendLoginOtp(msisdn));
     }
     if (state.kind === "missing" || state.kind === "unverified") {
-      return finish(msisdn, await sendRegisterOtp(msisdn));
+      const reg = await sendRegisterOtp(msisdn);
+      if (reg.ok) return finish(msisdn, reg);
+      // Fallback: If registration was refused because account is already verified, try login OTP
+      return finish(msisdn, await sendLoginOtp(msisdn));
     }
 
-    // check-account gave no usable answer even after a retry. Never try both OTP
-    // endpoints in sequence — Mytel's register endpoint SMSes even registered numbers,
-    // so trying both is what produced the double code with the first one invalid.
-    // Instead, route off what we know locally: a SIM that has ever logged in here has
-    // a verified account; only genuinely unknown numbers go through registration.
-    const existing = dbApi.getSim(msisdn);
-    const knownAccount =
-      existing != null &&
-      (existing.status === "active" || !!existing.access_token || !!existing.subscription_id);
+    // Default / Inconclusive account state:
+    // Try standard Login OTP first (fastest and standard path for existing SIMs)
+    const login = await sendLoginOtp(msisdn);
+    if (login.ok) return finish(msisdn, login);
 
-    if (knownAccount) {
-      const login = await sendLoginOtp(msisdn);
-      if (login.ok) return finish(msisdn, login);
-      // Register first in this case only if the login send itself was refused — a
-      // refusal (vs a delivery) cannot have SMSed the SIM.
-      return finish(msisdn, await sendRegisterOtp(msisdn));
-    }
-
+    // If login was rejected (e.g. fresh SIM needing registration), try Register OTP
     const register = await sendRegisterOtp(msisdn);
     if (register.ok) return finish(msisdn, register);
-    // Registration was rejected (e.g. the account is actually verified) — fall back to a
-    // login OTP so existing accounts are not stranded on an inconclusive check.
-    return finish(msisdn, await sendLoginOtp(msisdn));
+
+    return finish(msisdn, login.message ? login : register);
   } finally {
     inFlight.delete(msisdn);
   }

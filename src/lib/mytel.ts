@@ -53,9 +53,43 @@ export interface BalanceInfo {
   mainAmount: number;
 }
 
-const DEFAULT_TIMEOUT_MS = 12000;
+function getProxyAgent(): any {
+  const proxyUrl =
+    process.env.MYTEL_PROXY_URL ||
+    process.env.HTTPS_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.https_proxy ||
+    process.env.http_proxy;
+  if (!proxyUrl) return null;
+  try {
+    // undici is installed as a dependency for ProxyAgent support
+    // eslint-disable-next-line
+    const { ProxyAgent } = require("undici");
+    return new ProxyAgent(proxyUrl);
+  } catch (err) {
+    console.error("[mytel] Invalid proxy URL configured:", proxyUrl, err);
+    return null;
+  }
+}
 
-/** Fetch with built-in timeout to prevent server thread blocking when Mytel API hangs. */
+let cachedProxyAgent: any = undefined;
+function proxyDispatcher(): any {
+  if (cachedProxyAgent === undefined) {
+    cachedProxyAgent = getProxyAgent();
+    if (cachedProxyAgent) {
+      const masked = (process.env.MYTEL_PROXY_URL || process.env.HTTPS_PROXY || "").replace(
+        /:([^:@]+)@/,
+        ":****@"
+      );
+      console.log(`[mytel] Proxy enabled for Mytel API requests: ${masked}`);
+    }
+  }
+  return cachedProxyAgent || undefined;
+}
+
+const DEFAULT_TIMEOUT_MS = Number(process.env.MYTEL_TIMEOUT_MS) || 20000;
+
+/** Fetch with proxy dispatcher and built-in timeout to prevent server thread blocking when Mytel API hangs. */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -70,15 +104,29 @@ async function fetchWithTimeout(
     options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason));
   }
 
+  const fetchOptions: any = {
+    ...options,
+    signal: controller.signal,
+  };
+
+  const dispatcher = proxyDispatcher();
+  if (dispatcher) {
+    fetchOptions.dispatcher = dispatcher;
+  }
+
   try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    const res = await fetch(url, fetchOptions);
     return res;
   } catch (error: any) {
     if (error.name === "AbortError" || controller.signal.aborted) {
-      throw new Error(`Mytel API request timed out (${timeoutMs / 1000}s). Network may be unstable.`);
+      throw new Error(`Mytel API request timed out (${timeoutMs / 1000}s). Network/Proxy may be slow.`);
+    }
+    if (
+      error.code === "UND_ERR_CONNECT_TIMEOUT" ||
+      error.cause?.code === "ECONNREFUSED" ||
+      error.cause?.code === "ETIMEDOUT"
+    ) {
+      throw new Error(`Failed to reach Mytel API / Proxy (${error.message || error.cause?.code}).`);
     }
     throw error;
   } finally {
@@ -168,7 +216,13 @@ export async function checkAccount(phone: string): Promise<AccountState> {
   if (!ok || !data?.result) {
     return { kind: "unknown", errorCode: data?.errorCode, message: data?.message };
   }
-  if (data.result.verify !== true) return { kind: "unverified" };
+  const isVerified =
+    data.result.verify === true ||
+    String(data.result.verify).toLowerCase() === "true" ||
+    (data.result as any).verify === 1 ||
+    Boolean(data.result.myid);
+
+  if (!isVerified) return { kind: "unverified" };
   return {
     kind: "verified",
     myid: data.result.myid ?? null,

@@ -90,12 +90,13 @@ export default function SimsPage() {
     if (!phone) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/auth/request-otp", {
+      const res = await fetch("/api/auth/request-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone }),
-      }).then((r) => r.json());
-      if (r.ok) {
+      });
+      const r = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
+      if (res.ok && r.ok) {
         setOtpSent(true);
         setFlow(r.flow === "register" ? "register" : "login");
         setReqId(r.reqId ?? null);
@@ -109,11 +110,11 @@ export default function SimsPage() {
         });
       } else {
         toast.error("Couldn't send the OTP", {
-          description: r.message || "Check the number and try again.",
+          description: r.message || r.error || "Check the number and try again.",
         });
       }
-    } catch {
-      toast.error("Network error", { description: "The console couldn't reach Mytel. Try again." });
+    } catch (err: any) {
+      toast.error("Network error", { description: err?.message || "The console couldn't reach Mytel. Try again." });
     } finally {
       setBusy(false);
     }
@@ -127,12 +128,13 @@ export default function SimsPage() {
         mode === "otp"
           ? { phone, otp, reqId, subscriptionId: regSubId }
           : { phone, password };
-      const r = await fetch(url, {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      }).then((r) => r.json());
-      if (r.ok) {
+      });
+      const r = await res.json().catch(() => ({ ok: false, message: `Server error (${res.status})` }));
+      if (res.ok && r.ok) {
         toast.success(
           r.registered
             ? `${fmtPhoneGrouped(phone)} registered and logged in`
@@ -152,8 +154,8 @@ export default function SimsPage() {
           description: r.message || r.error || "Check the code or password and try again.",
         });
       }
-    } catch {
-      toast.error("Network error", { description: "The console couldn't reach Mytel. Try again." });
+    } catch (err: any) {
+      toast.error("Network error", { description: err?.message || "The console couldn't reach Mytel. Try again." });
     } finally {
       setBusy(false);
     }

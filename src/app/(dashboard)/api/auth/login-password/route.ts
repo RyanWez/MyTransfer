@@ -3,22 +3,34 @@ import { loginWithPassword, normalizeMsisdn, apiOk } from "@/lib/mytel";
 import { persistLogin } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
-  const { phone, password } = await req.json();
-  if (!phone || !password)
-    return NextResponse.json({ ok: false, error: "phone & password required" }, { status: 400 });
+  try {
+    const { phone, password } = await req.json();
+    if (!phone || !password)
+      return NextResponse.json({ ok: false, error: "phone & password required" }, { status: 400 });
 
-  const msisdn = normalizeMsisdn(phone);
-  const result = await loginWithPassword(msisdn, password);
+    const msisdn = normalizeMsisdn(phone);
+    const result = await loginWithPassword(msisdn, password);
 
-  if (!apiOk(result.errorCode) || !result.result?.access_token) {
-    return NextResponse.json({
-      ok: false,
-      errorCode: result.errorCode,
-      message: result.message ?? "Login failed",
-    });
+    if (!apiOk(result.errorCode) || !result.result?.access_token) {
+      return NextResponse.json({
+        ok: false,
+        errorCode: result.errorCode,
+        message: result.message ?? "Login failed",
+      });
+    }
+
+    const { subscriptionId, balance } = await persistLogin(msisdn, result.result);
+
+    return NextResponse.json({ ok: true, subscriptionId, balance });
+  } catch (err: any) {
+    console.error("[login-password] Error:", err);
+    return NextResponse.json(
+      {
+        ok: false,
+        errorCode: -1,
+        message: err?.message || "Failed to reach Mytel server",
+      },
+      { status: 502 }
+    );
   }
-
-  const { subscriptionId, balance } = await persistLogin(msisdn, result.result);
-
-  return NextResponse.json({ ok: true, subscriptionId, balance });
 }
