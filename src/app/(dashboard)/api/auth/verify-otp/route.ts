@@ -20,9 +20,19 @@ export async function POST(req: NextRequest) {
     const msisdn = normalizeMsisdn(phone);
     const registering = typeof reqId === "string" && reqId.length > 0;
 
+    // Diagnostic: log every verify attempt — if a second OTP arrives after clicking Login,
+    // this line and the next request-otp line will show whether WE sent it or Mytel did.
+    console.log(
+      `[verify-otp] ${new Date().toISOString()} phone=${msisdn} flow=${registering ? "register" : "login"} otp=${String(otp).slice(0, 2)}**** reqId=${registering ? "yes" : "no"}`
+    );
+
     const result = registering
       ? await confirmRegister(msisdn, reqId, otp)
       : await loginWithOtp(msisdn, otp);
+
+    console.log(
+      `[verify-otp] ${new Date().toISOString()} phone=${msisdn} flow=${registering ? "register" : "login"} result ok=${apiOk(result.errorCode)} errorCode=${result.errorCode ?? "-"} msg=${result.message ?? "-"} hasToken=${!!result.result?.access_token}`
+    );
 
     if (!apiOk(result.errorCode) || !result.result?.access_token) {
       return NextResponse.json({
