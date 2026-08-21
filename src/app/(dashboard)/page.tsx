@@ -184,9 +184,9 @@ export default function DashboardPage() {
                 tone: totals?.volume ? "brass" : "muted",
               },
               {
-                label: `Volume (-15%) ${period}`,
-                value: fmtAmount(Math.round((totals?.volume ?? 0) * 0.85)),
-                sub: "Ks, 15% deducted",
+                label: `Volume (-20%) ${period}`,
+                value: fmtAmount(Math.round((totals?.volume ?? 0) * 0.8)),
+                sub: "Ks, 20% deducted",
                 tone: totals?.volume ? "brass" : "muted",
               },
             ]}
