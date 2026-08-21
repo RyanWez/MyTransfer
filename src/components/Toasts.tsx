@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { Toaster, toast } from "sonner";
-import { Check, CircleAlert } from "lucide-react";
+import { CheckCircle2, CircleAlert } from "lucide-react";
 
 /**
  * Toasts carry every action result now — the old inline amber/rose message boxes
@@ -43,8 +43,16 @@ export default function Toasts() {
       offset={16}
       closeButton
       icons={{
-        success: <Check className="h-4 w-4 text-signal-deep" strokeWidth={2.25} />,
-        error: <CircleAlert className="h-4 w-4 text-alert" strokeWidth={2} />,
+        success: (
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-signal-wash">
+            <CheckCircle2 className="h-4 w-4 text-signal-deep" strokeWidth={2.5} />
+          </div>
+        ),
+        error: (
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-alert-wash">
+            <CircleAlert className="h-4 w-4 text-alert-deep" strokeWidth={2.5} />
+          </div>
+        ),
       }}
       toastOptions={{
         unstyled: true,
@@ -54,9 +62,9 @@ export default function Toasts() {
             "group flex w-[92vw] max-w-[440px] items-start gap-3 rounded-2xl border border-hairline bg-card/95 px-4 py-3.5 shadow-[0_10px_40px_-12px_rgba(0,0,0,0.35)] backdrop-blur-xl " +
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 " +
             "data-[state=open]:slide-in-from-top-2 data-[state=closed]:slide-out-to-top-2 data-[swipe-direction=up]:slide-out-to-top-2 duration-300",
-          success: "border-signal/30",
-          error: "border-alert/30",
-          icon: "mt-px shrink-0",
+          success: "border-hairline",
+          error: "border-hairline",
+          icon: "shrink-0",
           content: "min-w-0 flex-1",
           title: "text-sm font-medium text-ink",
           description: "mt-1 text-xs leading-relaxed text-ink-mute",
