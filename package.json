@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build",
-    "start": "PORT=3100 node .next/standalone/server.js",
-    "prod": "next build && PORT=3100 node .next/standalone/server.js",
+    "start": "next start -p 3100",
+    "prod": "next build && next start -p 3100",
     "lint": "next lint"
   },
   "dependencies": {
