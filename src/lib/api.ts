@@ -9,23 +9,35 @@ const cache = new Map<string, CacheEntry<unknown>>();
 const inFlight = new Map<string, Promise<unknown>>();
 const DEFAULT_TTL_MS = 3500; // 3.5s cache TTL for instant navigation without redundant network traffic
 
-async function cachedFetch<T>(key: string, url: string, ttlMs: number = DEFAULT_TTL_MS): Promise<T> {
+async function cachedFetch<T>(
+  key: string,
+  url: string,
+  ttlMs: number = DEFAULT_TTL_MS,
+  opts?: { bypassCache?: boolean; noDelay?: boolean }
+): Promise<T> {
   const now = Date.now();
-  const cached = cache.get(key);
-  if (cached && now - cached.timestamp < ttlMs) {
-    return cached.data as T;
+  if (!opts?.bypassCache) {
+    const cached = cache.get(key);
+    if (cached && now - cached.timestamp < ttlMs) {
+      return cached.data as T;
+    }
+    if (inFlight.has(key)) {
+      return inFlight.get(key) as Promise<T>;
+    }
+  } else {
+    // Bypass requested — clear stale entry and don't reuse inFlight
+    cache.delete(key);
+    inFlight.delete(key);
   }
 
-  if (inFlight.has(key)) {
-    return inFlight.get(key) as Promise<T>;
-  }
+  const delay = opts?.noDelay ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, 300));
 
   const promise = Promise.all([
     fetch(url).then((res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       return res.json();
     }),
-    new Promise((resolve) => setTimeout(resolve, 300)) // 300ms minimum delay for smooth skeleton loader transition
+    delay,
   ])
     .then(([data]) => {
       cache.set(key, { data: data as T, timestamp: Date.now() });
@@ -35,7 +47,9 @@ async function cachedFetch<T>(key: string, url: string, ttlMs: number = DEFAULT_
       inFlight.delete(key);
     });
 
-  inFlight.set(key, promise);
+  if (!opts?.bypassCache) {
+    inFlight.set(key, promise);
+  }
   return promise;
 }
 
@@ -53,20 +67,29 @@ export function invalidateCache(prefix?: string) {
 }
 
 /** Fetch stats with promise deduplication and short-term caching. */
-export async function fetchStats(from?: number, to?: number): Promise<StatsResponse> {
+export async function fetchStats(
+  from?: number,
+  to?: number,
+  opts?: { bypassCache?: boolean; noDelay?: boolean }
+): Promise<StatsResponse> {
   const query = from && to ? `?from=${from}&to=${to}` : "";
   const key = `stats:${from || "def"}:${to || "def"}`;
-  return cachedFetch<StatsResponse>(key, `/api/stats${query}`, 3000);
+  return cachedFetch<StatsResponse>(key, `/api/stats${query}`, 3000, opts);
 }
 
 /** Fetch SIMs with promise deduplication and short-term caching. */
-export async function fetchSims(): Promise<Sim[]> {
-  const data = await cachedFetch<{ ok: boolean; sims: Sim[] }>("sims", "/api/sims", 3000);
+export async function fetchSims(opts?: { bypassCache?: boolean; noDelay?: boolean }): Promise<Sim[]> {
+  const data = await cachedFetch<{ ok: boolean; sims: Sim[] }>("sims", "/api/sims", 3000, opts);
   return data.sims ?? [];
 }
 
 /** Fetch transfer history with promise deduplication and short-term caching. */
-export async function fetchHistory(from?: number, to?: number, limit?: number): Promise<Transfer[]> {
+export async function fetchHistory(
+  from?: number,
+  to?: number,
+  limit?: number,
+  opts?: { bypassCache?: boolean; noDelay?: boolean }
+): Promise<Transfer[]> {
   const params = new URLSearchParams();
   if (from !== undefined) params.set("from", String(from));
   if (to !== undefined) params.set("to", String(to));
@@ -76,7 +99,8 @@ export async function fetchHistory(from?: number, to?: number, limit?: number): 
   const data = await cachedFetch<{ ok: boolean; transfers: Transfer[] }>(
     key,
     `/api/history${query}`,
-    2500
+    2500,
+    opts
   );
   return data.transfers ?? [];
 }

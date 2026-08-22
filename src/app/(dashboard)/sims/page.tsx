@@ -54,7 +54,8 @@ export default function SimsPage() {
   const load = useCallback(
     (background = false) => {
       if (!background) setLoaded(false);
-      fetchSims()
+      const opts = background ? { bypassCache: true, noDelay: true } : undefined;
+      fetchSims(opts)
         .then((all) => setSims(all))
         .catch(() => {})
         .finally(() => setLoaded(true));
@@ -64,16 +65,41 @@ export default function SimsPage() {
 
   useEffect(() => {
     load();
-
-    const eventSource = new EventSource("/api/events");
-    eventSource.onmessage = (e) => {
-      if (e.data === "update") {
-        load(true);
-      }
-    };
-
-    return () => eventSource.close();
   }, [load]);
+
+  useEffect(() => {
+    let retries = 0;
+    let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connect() {
+      es = new EventSource("/api/events");
+      es.onmessage = (e) => {
+        if (e.data === "update") {
+          invalidateCache("sims");
+          fetchSims({ bypassCache: true, noDelay: true })
+            .then((all) => setSims(all))
+            .catch(() => {});
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        const delay = Math.min(1000 * 2 ** retries++, 30000);
+        reconnectTimer = setTimeout(connect, delay);
+      };
+      es.onopen = () => {
+        retries = 0;
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      es?.close();
+    };
+  }, []);
 
   const filteredSims = useMemo(() => {
     if (!searchQuery.trim()) return sims;

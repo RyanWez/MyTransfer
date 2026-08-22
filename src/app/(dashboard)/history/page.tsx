@@ -26,7 +26,7 @@ import {
   statusBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fetchHistory } from "@/lib/api";
+import { fetchHistory, invalidateCache } from "@/lib/api";
 import type { Transfer } from "@/lib/types";
 
 type Filter = "all" | "success" | "pending" | "failed";
@@ -168,9 +168,16 @@ export default function HistoryPage() {
   const [confirmAmount, setConfirmAmount] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const dateRangeRef = useRef(dateRange);
+  useEffect(() => {
+    dateRangeRef.current = dateRange;
+  }, [dateRange]);
+
   const loadData = useCallback((background = false) => {
     if (!background) setLoaded(false);
-    fetchHistory(dateRange.from ?? undefined, dateRange.to ?? undefined)
+    const opts = background ? { bypassCache: true, noDelay: true } : undefined;
+    const r = background ? dateRangeRef.current : dateRange;
+    fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, opts)
       .then((transfers) => setRows(transfers))
       .catch(() => {})
       .finally(() => setLoaded(true));
@@ -178,16 +185,42 @@ export default function HistoryPage() {
 
   useEffect(() => {
     loadData();
-
-    const eventSource = new EventSource("/api/events");
-    eventSource.onmessage = (e) => {
-      if (e.data === "update") {
-        loadData(true);
-      }
-    };
-
-    return () => eventSource.close();
   }, [loadData]);
+
+  useEffect(() => {
+    let retries = 0;
+    let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connect() {
+      es = new EventSource("/api/events");
+      es.onmessage = (e) => {
+        if (e.data === "update") {
+          invalidateCache("history");
+          const r = dateRangeRef.current;
+          fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, { bypassCache: true, noDelay: true })
+            .then((transfers) => setRows(transfers))
+            .catch(() => {});
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        const delay = Math.min(1000 * 2 ** retries++, 30000);
+        reconnectTimer = setTimeout(connect, delay);
+      };
+      es.onopen = () => {
+        retries = 0;
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      es?.close();
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const trimmed = searchQuery.trim();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, SquareStack } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Card";
@@ -22,7 +22,7 @@ import { ErrorPieChart } from "@/components/ErrorPieChart";
 import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart";
 import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { fetchStats } from "@/lib/api";
+import { fetchStats, invalidateCache } from "@/lib/api";
 import type { StatsResponse } from "@/lib/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -34,12 +34,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
+  const rangeRef = useRef(range);
+  useEffect(() => {
+    rangeRef.current = range;
+  }, [range]);
+
   useEffect(() => {
     let alive = true;
 
     function load(background = false) {
       if (!background) setLoading(true);
-      fetchStats(range.from, range.to)
+      const opts = background ? { bypassCache: true, noDelay: true } : undefined;
+      const r = background ? rangeRef.current : range;
+      fetchStats(r.from, r.to, opts)
         .then((d: StatsResponse) => {
           if (alive && d?.ok) setData(d);
         })
@@ -54,18 +61,45 @@ export default function DashboardPage() {
 
     load();
 
-    const eventSource = new EventSource("/api/events");
-    eventSource.onmessage = (e) => {
-      if (e.data === "update") {
-        load(true);
-      }
-    };
-
     return () => {
       alive = false;
-      eventSource.close();
     };
   }, [range]);
+
+  useEffect(() => {
+    let retries = 0;
+    let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connect() {
+      es = new EventSource("/api/events");
+      es.onmessage = (e) => {
+        if (e.data === "update") {
+          invalidateCache();
+          const r = rangeRef.current;
+          fetchStats(r.from, r.to, { bypassCache: true, noDelay: true })
+            .then((d: StatsResponse) => setData(d))
+            .catch(() => {});
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        const delay = Math.min(1000 * 2 ** retries++, 30000);
+        reconnectTimer = setTimeout(connect, delay);
+      };
+      es.onopen = () => {
+        retries = 0;
+      };
+    }
+
+    connect();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      es?.close();
+    };
+  }, []);
 
   const onPreset = useCallback((key: RangeKey) => {
     setPreset(key);
