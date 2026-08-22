@@ -166,8 +166,8 @@ export default function HistoryPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const loadData = useCallback(() => {
-    setLoaded(false);
+  const loadData = useCallback((background = false) => {
+    if (!background) setLoaded(false);
     fetchHistory(dateRange.from ?? undefined, dateRange.to ?? undefined)
       .then((transfers) => setRows(transfers))
       .catch(() => {})
@@ -176,6 +176,15 @@ export default function HistoryPage() {
 
   useEffect(() => {
     loadData();
+
+    const eventSource = new EventSource("/api/events");
+    eventSource.onmessage = (e) => {
+      if (e.data === "update") {
+        loadData(true);
+      }
+    };
+
+    return () => eventSource.close();
   }, [loadData]);
 
   const filtered = useMemo(() => {

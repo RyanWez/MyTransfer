@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { sse } from "./events";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -213,11 +214,13 @@ export const dbApi = {
       vals.push(phone);
       db.prepare(`UPDATE sims SET ${sets.join(", ")} WHERE phone = ?`).run(...vals);
     }
+    sse.emit("update");
     return this.getSim(phone)!;
   },
 
   deleteSim(phone: string) {
     stmtDeleteSim.run(phone);
+    sse.emit("update");
   },
 
   addTransfer(t: {
@@ -236,6 +239,7 @@ export const dbApi = {
       message: null,
       ...t,
     });
+    sse.emit("update");
     return stmtGetTransferById.get(info.lastInsertRowid) as TransferRow;
   },
 
@@ -250,6 +254,7 @@ export const dbApi = {
     if (!sets.length) return;
     vals.push(id);
     db.prepare(`UPDATE transfers SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+    sse.emit("update");
   },
 
   listTransfers(limit = 1000, fromTs?: number, toTs?: number): TransferRow[] {
@@ -261,6 +266,7 @@ export const dbApi = {
 
   deleteTransfer(id: number) {
     stmtDeleteTransfer.run(id);
+    sse.emit("update");
   },
 
   /**

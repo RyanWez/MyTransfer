@@ -36,20 +36,34 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    fetchStats(range.from, range.to)
-      .then((d: StatsResponse) => {
-        if (alive && d?.ok) setData(d);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) {
-          setLoading(false);
-          setLoaded(true);
-        }
-      });
+
+    function load(background = false) {
+      if (!background) setLoading(true);
+      fetchStats(range.from, range.to)
+        .then((d: StatsResponse) => {
+          if (alive && d?.ok) setData(d);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (alive) {
+            setLoading(false);
+            setLoaded(true);
+          }
+        });
+    }
+
+    load();
+
+    const eventSource = new EventSource("/api/events");
+    eventSource.onmessage = (e) => {
+      if (e.data === "update") {
+        load(true);
+      }
+    };
+
     return () => {
       alive = false;
+      eventSource.close();
     };
   }, [range]);
 

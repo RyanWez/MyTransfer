@@ -52,16 +52,27 @@ export default function SimsPage() {
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
 
   const load = useCallback(
-    () =>
+    (background = false) => {
+      if (!background) setLoaded(false);
       fetchSims()
         .then((all) => setSims(all))
         .catch(() => {})
-        .finally(() => setLoaded(true)),
+        .finally(() => setLoaded(true));
+    },
     []
   );
 
   useEffect(() => {
     load();
+
+    const eventSource = new EventSource("/api/events");
+    eventSource.onmessage = (e) => {
+      if (e.data === "update") {
+        load(true);
+      }
+    };
+
+    return () => eventSource.close();
   }, [load]);
 
   const filteredSims = useMemo(() => {
