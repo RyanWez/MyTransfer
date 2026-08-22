@@ -184,6 +184,10 @@ const stmtActiveTotalBalance = db.prepare(
 export { DAILY_LIMIT_PER_SIM } from "./constants";
 
 export const dbApi = {
+  getTransferById(id: number): TransferRow | undefined {
+    return stmtGetTransferById.get(id) as TransferRow | undefined;
+  },
+
   listSims(): SimRow[] {
     return stmtListSims.all() as SimRow[];
   },

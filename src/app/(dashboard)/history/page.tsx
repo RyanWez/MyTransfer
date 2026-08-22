@@ -165,6 +165,8 @@ export default function HistoryPage() {
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmAmount, setConfirmAmount] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const loadData = useCallback((background = false) => {
     if (!background) setLoaded(false);
@@ -260,11 +262,18 @@ export default function HistoryPage() {
   async function confirmDelete() {
     if (!deleteId) return;
     setIsDeleting(true);
+    
+    const transferToDelete = rows.find(r => r.id === deleteId);
+    const isHighValue = transferToDelete ? transferToDelete.amount >= 5000 : false;
+
     try {
       const res = await fetch("/api/history", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: deleteId }),
+        body: JSON.stringify({ 
+          id: deleteId,
+          ...(isHighValue ? { password: confirmPassword } : {})
+        }),
       }).then((r) => r.json());
       if (res.ok) {
         setRows((r) => r.filter((x) => x.id !== deleteId));
@@ -277,6 +286,8 @@ export default function HistoryPage() {
     } finally {
       setIsDeleting(false);
       setDeleteId(null);
+      setConfirmAmount("");
+      setConfirmPassword("");
     }
   }
 
@@ -575,18 +586,76 @@ export default function HistoryPage() {
       )}
 
       {/* Delete Confirmation */}
-      <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
+      <Dialog 
+        open={!!deleteId} 
+        onOpenChange={(o) => {
+          if (!o) {
+            setDeleteId(null);
+            setConfirmAmount("");
+            setConfirmPassword("");
+          }
+        }}
+      >
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete record?</DialogTitle>
-            <DialogDescription>
-              This will permanently remove the transfer record from the history log. Are you sure you want to proceed?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeleteId(null)} disabled={isDeleting}>Cancel</Button>
-            <Button variant="destructive" loading={isDeleting} onClick={confirmDelete}>Delete</Button>
-          </DialogFooter>
+          {(() => {
+            const transferToDelete = rows.find(r => r.id === deleteId);
+            const isHighValue = transferToDelete ? transferToDelete.amount >= 5000 : false;
+            const canDelete = isHighValue 
+              ? confirmAmount === String(transferToDelete?.amount) && confirmPassword.length > 0
+              : true;
+
+            return (
+              <>
+                {isHighValue ? (
+                  <>
+                    <DialogHeader>
+                      <DialogTitle>Delete High Value Transfer?</DialogTitle>
+                      <DialogDescription>
+                        This will permanently remove the transfer record of <strong className="font-mono">{transferToDelete?.amount} Ks</strong>.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-ink">
+                          To confirm, type "{transferToDelete?.amount}"
+                        </label>
+                        <input 
+                          type="text"
+                          value={confirmAmount}
+                          onChange={(e) => setConfirmAmount(e.target.value)}
+                          className="w-full rounded border border-hairline bg-card px-3 py-2 text-sm focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-ink">
+                          To confirm, type AUTH_PASSWORD
+                        </label>
+                        <input 
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full rounded border border-hairline bg-card px-3 py-2 text-sm focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <DialogHeader>
+                    <DialogTitle>Delete record?</DialogTitle>
+                    <DialogDescription>
+                      This will permanently remove the transfer record from the history log. Are you sure you want to proceed?
+                    </DialogDescription>
+                  </DialogHeader>
+                )}
+                <DialogFooter className={isHighValue ? "pt-2" : ""}>
+                  <Button variant="ghost" onClick={() => setDeleteId(null)} disabled={isDeleting}>Cancel</Button>
+                  <Button variant="destructive" loading={isDeleting} disabled={!canDelete} onClick={confirmDelete}>Delete</Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
