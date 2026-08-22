@@ -617,7 +617,7 @@ export default function HistoryPage() {
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-ink">
-                          To confirm, type "{transferToDelete?.amount}"
+                          To confirm, type &quot;{transferToDelete?.amount}&quot;
                         </label>
                         <input 
                           type="text"
