@@ -17,6 +17,7 @@ import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
 import { useNowSec } from "@/lib/useNowSec";
 import { useSessionState } from "@/lib/useSessionState";
+import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import type { Sim } from "@/lib/types";
 
 const QUICK = [500, 800, 1000, 5000];
@@ -99,7 +100,21 @@ export default function TransferPage() {
   const amt = Number(amount);
   const fee = Number.isFinite(amt) ? Math.round(amt * 0.05) : 0;
   const total = amt + fee;
-  const amountValid = Number.isFinite(amt) && amt >= 500 && amt <= 5000;
+
+  let amountError: string | undefined;
+  if (amount !== "") {
+    if (!Number.isFinite(amt) || amt < 500 || amt > 5000) {
+      amountError = "Enter between 500 and 5,000 Ks.";
+    } else if (selected) {
+      if (amt + selected.volume_today > DAILY_VOLUME_LIMIT) {
+        amountError = `Daily limit exceeded (${fmtKs(DAILY_VOLUME_LIMIT - selected.volume_today)} remaining).`;
+      } else if (amt + selected.volume_this_month > MONTHLY_VOLUME_LIMIT) {
+        amountError = `Monthly limit exceeded (${fmtKs(MONTHLY_VOLUME_LIMIT - selected.volume_this_month)} remaining).`;
+      }
+    }
+  }
+
+  const amountValid = amount !== "" && !amountError;
   const receiverValid = receiver.replace(/\D/g, "").length >= 9;
   const short = amountValid && senderBalance !== null && total > senderBalance;
 
@@ -347,7 +362,7 @@ export default function TransferPage() {
             inputMode="numeric"
             suffix="Ks"
             className="font-mono text-base tnum"
-            error={amount !== "" && !amountValid ? "Enter between 500 and 5,000 Ks." : undefined}
+            error={amountError}
           />
           <div className="mt-2 flex gap-2">
             {QUICK.map((q) => (

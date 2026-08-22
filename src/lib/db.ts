@@ -87,6 +87,13 @@ const startOfToday = () => {
   return Math.floor(d.getTime() / 1000);
 };
 
+const startOfThisMonth = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(1);
+  return Math.floor(d.getTime() / 1000);
+};
+
 /** Chart bucket width. Hourly for a single day, daily for anything longer. */
 export type Granularity = "hour" | "day";
 
@@ -137,8 +144,14 @@ const stmtListTransfersRange = db.prepare(
 );
 const stmtDeleteTransfer = db.prepare("DELETE FROM transfers WHERE id = ?");
 
-const stmtTodayCountBySender = db.prepare(
-  `SELECT sender_phone, COUNT(*) as cnt
+const stmtTodayVolumeBySender = db.prepare(
+  `SELECT sender_phone, SUM(amount) as volume
+   FROM transfers WHERE created_at >= ? AND status = 'success'
+   GROUP BY sender_phone`
+);
+
+const stmtThisMonthVolumeBySender = db.prepare(
+  `SELECT sender_phone, SUM(amount) as volume
    FROM transfers WHERE created_at >= ? AND status = 'success'
    GROUP BY sender_phone`
 );
@@ -181,7 +194,7 @@ const stmtActiveTotalBalance = db.prepare(
 // Re-exported so server code has one import for both the DB and the limit; the
 // constant itself lives in lib/constants.ts because client components need it too
 // and must not pull better-sqlite3 into the browser bundle.
-export { DAILY_LIMIT_PER_SIM } from "./constants";
+export { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "./constants";
 
 export const dbApi = {
   getTransferById(id: number): TransferRow | undefined {
@@ -274,12 +287,19 @@ export const dbApi = {
   },
 
   /**
-   * Successful transfers sent per SIM since midnight, keyed by sender phone.
-   * Drives the per-SIM "3 of 5 today" line and the dashboard capacity meter.
+   * Successful volume sent per SIM since midnight, keyed by sender phone.
    */
-  todayCountBySender(): Record<string, number> {
-    const rows = stmtTodayCountBySender.all(startOfToday()) as { sender_phone: string; cnt: number }[];
-    return Object.fromEntries(rows.map((r) => [r.sender_phone, r.cnt]));
+  todayVolumeBySender(): Record<string, number> {
+    const rows = stmtTodayVolumeBySender.all(startOfToday()) as { sender_phone: string; volume: number }[];
+    return Object.fromEntries(rows.map((r) => [r.sender_phone, r.volume]));
+  },
+
+  /**
+   * Successful volume sent per SIM since start of this month, keyed by sender phone.
+   */
+  thisMonthVolumeBySender(): Record<string, number> {
+    const rows = stmtThisMonthVolumeBySender.all(startOfThisMonth()) as { sender_phone: string; volume: number }[];
+    return Object.fromEntries(rows.map((r) => [r.sender_phone, r.volume]));
   },
 
   /**

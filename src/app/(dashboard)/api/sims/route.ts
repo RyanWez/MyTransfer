@@ -3,12 +3,14 @@ import { dbApi } from "@/lib/db";
 import { normalizeMsisdn } from "@/lib/mytel";
 
 export async function GET() {
-  const sentToday = dbApi.todayCountBySender();
+  const volumeToday = dbApi.todayVolumeBySender();
+  const volumeThisMonth = dbApi.thisMonthVolumeBySender();
   const sims = dbApi.listSims().map((s) => ({
     ...s,
     access_token: undefined,
     refresh_token: undefined,
-    sent_today: sentToday[s.phone] ?? 0,
+    volume_today: volumeToday[s.phone] ?? 0,
+    volume_this_month: volumeThisMonth[s.phone] ?? 0,
   }));
   return NextResponse.json({ ok: true, sims });
 }

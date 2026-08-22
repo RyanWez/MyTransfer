@@ -10,8 +10,10 @@ export interface Sim {
   subscription_id: string | null;
   status: string;
   note: string | null;
-  /** Successful transfers sent by this SIM since midnight. */
-  sent_today: number;
+  /** Successful volume sent by this SIM since midnight. */
+  volume_today: number;
+  /** Successful volume sent by this SIM since the start of the month. */
+  volume_this_month: number;
   created_at: number;
   updated_at: number;
 }

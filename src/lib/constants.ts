@@ -1,4 +1,5 @@
 /** Shared with client components — must stay free of server-only imports. */
 
-/** MyShare allows 5 transfers per SIM per day. Surfaced in the UI, not enforced here. */
-export const DAILY_LIMIT_PER_SIM = 5;
+/** MyShare limits based on volume. */
+export const DAILY_VOLUME_LIMIT = 25000;
+export const MONTHLY_VOLUME_LIMIT = 50000;

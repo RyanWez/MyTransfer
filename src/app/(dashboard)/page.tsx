@@ -20,7 +20,7 @@ import {
 } from "@/lib/format";
 import { ErrorPieChart } from "@/components/ErrorPieChart";
 import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart";
-import { DAILY_LIMIT_PER_SIM } from "@/lib/constants";
+import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { fetchStats } from "@/lib/api";
 import type { StatsResponse } from "@/lib/types";
@@ -316,8 +316,8 @@ export default function DashboardPage() {
       </section>
 
       <p className="max-w-xl text-xs leading-relaxed text-ink-faint">
-        MyShare limits: 500–5,000 Ks per transfer, 5% fee, {DAILY_LIMIT_PER_SIM} transfers per SIM
-        per day. The OTP always goes to the sender SIM.
+        MyShare limits: 500–5,000 Ks per transfer, 5% fee, {fmtAmount(DAILY_VOLUME_LIMIT)} Ks daily and {fmtAmount(MONTHLY_VOLUME_LIMIT)} Ks monthly per SIM.
+        The OTP always goes to the sender SIM.
       </p>
     </div>
   );

@@ -8,7 +8,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { Button } from "@/components/ui/Button";
 import { TokenLife } from "@/components/TokenLife";
 import { fmtAmount, fmtPhoneGrouped, fmtTime, statusBadge } from "@/lib/format";
-import { DAILY_LIMIT_PER_SIM } from "@/lib/constants";
+import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import type { Sim } from "@/lib/types";
 
 export interface SimCardProps {
@@ -36,7 +36,7 @@ function SimCard({
 }: SimCardProps) {
   const state = statusBadge(sim.status);
   const active = sim.status === "active";
-  const atLimit = sim.sent_today >= DAILY_LIMIT_PER_SIM;
+  const atLimit = sim.volume_today >= DAILY_VOLUME_LIMIT || sim.volume_this_month >= MONTHLY_VOLUME_LIMIT;
 
   return (
     <Panel
@@ -62,7 +62,7 @@ function SimCard({
             atLimit ? "text-alert-deep" : "text-ink-faint"
           )}
         >
-          {sim.sent_today} of {DAILY_LIMIT_PER_SIM} today
+          {fmtAmount(sim.volume_today)} / {fmtAmount(DAILY_VOLUME_LIMIT)} today
         </span>
       </div>
 
@@ -155,7 +155,7 @@ export interface SimChipProps {
  */
 function SimChip({ sim, selected, onSelect }: SimChipProps) {
   const active = sim.status === "active";
-  const atLimit = sim.sent_today >= DAILY_LIMIT_PER_SIM;
+  const atLimit = sim.volume_today >= DAILY_VOLUME_LIMIT || sim.volume_this_month >= MONTHLY_VOLUME_LIMIT;
 
   return (
     <Panel
@@ -189,7 +189,7 @@ function SimChip({ sim, selected, onSelect }: SimChipProps) {
             atLimit ? "text-alert-deep" : "text-ink-faint"
           )}
         >
-          {atLimit ? "Daily limit reached" : `${sim.sent_today} of ${DAILY_LIMIT_PER_SIM} today`}
+          {atLimit ? "Volume limit reached" : `${fmtAmount(sim.volume_today)} / ${fmtAmount(DAILY_VOLUME_LIMIT)} today`}
         </div>
       )}
     </Panel>
