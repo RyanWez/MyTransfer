@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { fetchHistory } from "@/lib/api";
 import type { Transfer } from "@/lib/types";
 
-type Filter = "all" | "success" | "failed";
+type Filter = "all" | "success" | "pending" | "failed";
 
 function getInitialTodayRange(): DateRange {
   const today = new Date();
@@ -55,7 +55,7 @@ function getPaginationRange(current: number, total: number): (number | "...")[] 
 
 function HistorySkeleton() {
   return (
-    <div className="max-w-4xl mx-auto space-y-5 animate-pulse">
+    <div className="max-w-5xl mx-auto space-y-5 animate-pulse">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="h-5 w-32 bg-substrate rounded" />
         <div className="flex gap-2.5">
@@ -276,7 +276,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5">
+    <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="whitespace-nowrap font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
           {searchQuery.trim() || filter !== "all" ? (
@@ -326,8 +326,9 @@ export default function HistoryPage() {
             onValueChange={handleFilterChange}
             options={[
               { value: "all", label: "All" },
-              { value: "success", label: "Sent" },
-              { value: "failed", label: "Failed" },
+              { value: "success", label: "Success" },
+              { value: "pending", label: "Pending" },
+              { value: "failed", label: "Error" },
             ]}
           />
         </div>
@@ -397,7 +398,7 @@ export default function HistoryPage() {
             body={
               searchQuery.trim()
                 ? `No transfers found matching "${searchQuery}". Try searching by a different phone number or status.`
-                : `No ${filter === "failed" ? "failed" : "successful"} transfers in the log.`
+                : `No ${filter === "failed" ? "failed" : filter === "pending" ? "pending" : "successful"} transfers in the log.`
             }
             action={
               <Button
