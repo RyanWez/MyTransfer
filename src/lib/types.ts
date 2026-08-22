@@ -53,4 +53,5 @@ export interface StatsResponse {
     buckets: SeriesBucket[];
   };
   totals: { sent: number; failed: number; volume: number };
+  topErrors: { reason: string; count: number }[];
 }

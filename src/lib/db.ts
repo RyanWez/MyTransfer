@@ -162,6 +162,15 @@ const stmtRangeSeriesDay = db.prepare(
    GROUP BY bucket`
 );
 
+const stmtTopErrors = db.prepare(
+  `SELECT COALESCE(message, 'Error ' || error_code, 'Unknown Error') as reason, COUNT(*) as count
+   FROM transfers
+   WHERE status = 'failed' AND created_at >= ? AND created_at < ?
+   GROUP BY reason
+   ORDER BY count DESC
+   LIMIT 5`
+);
+
 const stmtSimCount = db.prepare("SELECT COUNT(*) c FROM sims");
 const stmtActiveSimCount = db.prepare("SELECT COUNT(*) c FROM sims WHERE status = 'active'");
 const stmtActiveTotalBalance = db.prepare(
@@ -301,6 +310,11 @@ export const dbApi = {
       stepBucket(cursor, granularity);
     }
     return out;
+  },
+
+  /** Returns top 5 reasons for failed transfers in the time range. */
+  topErrors(fromTs: number, toTs: number): { reason: string; count: number }[] {
+    return stmtTopErrors.all(fromTs, toTs) as { reason: string; count: number }[];
   },
 
   /** Tray-wide figures that don't depend on the selected date range. */

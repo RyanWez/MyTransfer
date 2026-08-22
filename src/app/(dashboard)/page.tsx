@@ -18,6 +18,7 @@ import {
   fmtShortDate,
   statusBadge,
 } from "@/lib/format";
+import { ErrorPieChart } from "@/components/ErrorPieChart";
 import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart";
 import { DAILY_LIMIT_PER_SIM } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -175,7 +176,11 @@ export default function DashboardPage() {
         <div className={cn("space-y-6 transition-opacity", loading && data && "opacity-50")}>
           <MetricStrip
             items={[
-              { label: `Sent ${period}`, value: fmtAmount(totals?.sent ?? 0) },
+              { 
+                label: `Success ${period}`, 
+                value: fmtAmount(totals?.sent ?? 0),
+                sub: totals ? `${Math.round((totals.sent / Math.max(1, totals.sent + totals.failed)) * 100)}% success rate` : undefined,
+              },
               {
                 label: `Volume ${period}`,
                 value: fmtAmount(totals?.volume ?? 0),
@@ -223,6 +228,18 @@ export default function DashboardPage() {
               caption={`Volume moved ${period} in Ks, ${grain.toLowerCase()}`}
             />
           </div>
+
+          {data?.topErrors && data.topErrors.length > 0 && (
+            <div className="rounded border border-hairline bg-card px-4 py-4">
+              <div className="mb-4 flex items-baseline justify-between gap-4">
+                <Eyebrow>Top Error Reasons</Eyebrow>
+                <span className="font-mono text-eyebrow uppercase text-ink-faint">
+                  {fmtAmount(totals?.failed ?? 0)} FAILED
+                </span>
+              </div>
+              <ErrorPieChart data={data.topErrors} className="py-2" />
+            </div>
+          )}
         </div>
       </section>
 

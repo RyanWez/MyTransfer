@@ -45,5 +45,6 @@ export async function GET(req: NextRequest) {
     stats: dbApi.trayStats(),
     series: { from, to, granularity, buckets },
     totals: totals(buckets),
+    topErrors: dbApi.topErrors(from, to),
   });
 }
