@@ -43,6 +43,10 @@ const SEARCH_DEBOUNCE_MS = 300;
  *  pagination footer on any screen, never collapsing under 360px. */
 const LOG_VIEWPORT = "max-h-[max(360px,calc(100vh-288px))]";
 
+/** Fixed slice per request — the adaptive frame scrolls, so a bigger page
+ *  just means fewer round-trips, not a taller document. */
+const PAGE_SIZE = 50;
+
 function getInitialTodayRange(): DateRange {
   const today = new Date();
   const from = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime() / 1000);
@@ -218,7 +222,6 @@ export default function HistoryPage() {
   const [searchInput, setSearchInput] = useState("");
   /** Committed after the debounce — what the server actually searches for. */
   const [query, setQuery] = useState("");
-  const [pageSize, setPageSize] = useState<number>(10);
   const [page, setPage] = useState(1);
 
   const [data, setData] = useState<HistoryPage | null>(null);
@@ -233,7 +236,7 @@ export default function HistoryPage() {
 
   const transfers = data?.transfers ?? NO_ROWS;
   const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.min(Math.max(1, page), pageCount);
   const hasFilters = filter !== "all" || query !== "";
 
@@ -254,7 +257,7 @@ export default function HistoryPage() {
           status: filter !== "all" ? filter : undefined,
           q: query || undefined,
           page,
-          pageSize,
+          pageSize: PAGE_SIZE,
         },
         { bypassCache: opts?.bypass, noDelay: true }
       )
@@ -265,7 +268,7 @@ export default function HistoryPage() {
           setInitialLoaded(true);
         });
     },
-    [dateRange, filter, query, page, pageSize]
+    [dateRange, filter, query, page]
   );
 
   useEffect(() => {
@@ -333,11 +336,6 @@ export default function HistoryPage() {
   function applyQueryNow(val: string) {
     setSearchInput(val);
     setQuery(val.trim());
-    setPage(1);
-  }
-
-  function handlePageSizeChange(size: number) {
-    setPageSize(size);
     setPage(1);
   }
 
@@ -619,34 +617,13 @@ export default function HistoryPage() {
 
         </div>
 
-        {/* Pagination & Page Size Controls */}
+        {/* Pagination Controls */}
         {total > 0 && (
           <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-5 sm:flex-row">
-            <div className="flex flex-wrap items-center gap-3 font-mono text-eyebrow uppercase tnum text-ink-mute">
-              <span>
-                Showing {(currentPage - 1) * pageSize + 1}–
-                {Math.min(currentPage * pageSize, total)} of {fmtAmount(total)} transfers
-              </span>
-              <span className="hidden text-hairline-strong sm:inline">·</span>
-              <div className="flex items-center gap-1.5">
-                <span className="text-ink-faint">Rows:</span>
-                {[10, 20, 50].map((size) => (
-                  <button
-                    key={size}
-                    type="button"
-                    onClick={() => handlePageSizeChange(size)}
-                    className={cn(
-                      "rounded px-2 py-0.5 font-mono text-xs transition-colors",
-                      pageSize === size
-                        ? "bg-ink font-semibold text-substrate shadow-sm"
-                        : "border border-hairline bg-card text-ink-mute hover:border-hairline-strong hover:bg-substrate hover:text-ink"
-                    )}
-                  >
-                    {size}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <span className="whitespace-nowrap font-mono text-eyebrow uppercase tnum text-ink-mute">
+              Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+              {Math.min(currentPage * PAGE_SIZE, total)} of {fmtAmount(total)} transfers
+            </span>
 
             {pageCount > 1 && (
               <div className="flex items-center gap-1.5">
