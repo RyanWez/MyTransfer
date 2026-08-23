@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { fmtAmount, fmtClock, fmtPhone, fmtPhoneGrouped } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fetchHistory } from "@/lib/api";
+import { fetchAllTransfers } from "@/lib/api";
 import { toast } from "sonner";
 import type { Transfer } from "@/lib/types";
 
@@ -47,10 +47,10 @@ function ReceiversSkeleton() {
 
 const PAGE_SIZE = 50;
 
-/** Viewport caps: the outer list scrolls after ~10 receiver rows, an expanded
- *  receiver's transfer list scrolls after ~5 rows — a phone with dozens of
- *  transfers can't stretch the page anymore. */
-const LIST_VIEWPORT = "max-h-[600px]";
+/** Viewport caps: the outer list fills the space between the top bar and the
+ *  pagination footer (never under 360px), and an expanded receiver's transfer
+ *  list scrolls after ~5 rows — neither can stretch the whole page anymore. */
+const LIST_VIEWPORT = "max-h-[max(360px,calc(100vh-288px))]";
 const TRANSFERS_VIEWPORT = "max-h-[350px]";
 
 function getPaginationRange(current: number, total: number): (number | "...")[] {
@@ -95,10 +95,10 @@ export default function ReceiversPage() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchHistory(range.from ?? undefined, range.to ?? undefined)
-      .then(({ transfers }) => {
+    fetchAllTransfers(range.from ?? undefined, range.to ?? undefined)
+      .then((data) => {
         if (alive) {
-          setTransfers(transfers || []);
+          setTransfers(data || []);
           setLoading(false);
         }
       })

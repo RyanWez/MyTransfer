@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
@@ -24,89 +24,30 @@ import {
   fmtDayHeader,
   fmtPhone,
   fmtPhoneGrouped,
-  phoneSearchKeys,
   statusBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fetchHistory, invalidateCache } from "@/lib/api";
+import { fetchHistoryPage, invalidateCache, type HistoryPage } from "@/lib/api";
 import { useLive } from "@/lib/liveEvents";
 import type { Transfer } from "@/lib/types";
 
 type Filter = "all" | "success" | "pending" | "failed";
 
-/** Download the given rows as CSV (Excel-friendly, BOM-prefixed). */
-function exportCsv(rows: Transfer[]) {
-  const esc = (v: string | number | null | undefined) => {
-    const s = v === null || v === undefined ? "" : String(v);
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const header = ["id", "datetime", "sender", "receiver", "amount", "fee", "status", "error_code", "message"];
-  const lines = rows.map((r) =>
-    [
-      r.id,
-      new Date(r.created_at * 1000).toISOString(),
-      r.sender_phone,
-      r.receiver_phone,
-      r.amount,
-      r.fee,
-      r.status,
-      r.error_code ?? "",
-      r.message ?? "",
-    ]
-      .map(esc)
-      .join(",")
-  );
-  // BOM so Excel opens the file as UTF-8 without an import wizard.
-  const csv = "\uFEFF" + [header.join(","), ...lines].join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `myshare-history-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+const NO_ROWS: Transfer[] = [];
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
+/** How long typed characters wait before the server-side search runs. */
+const SEARCH_DEBOUNCE_MS = 300;
+
+/** Viewport cap — the log scrolls inside this frame instead of stretching
+ *  the whole page. Fills the space between the sticky top bar and the
+ *  pagination footer on any screen, never collapsing under 360px. */
+const LOG_VIEWPORT = "max-h-[max(360px,calc(100vh-288px))]";
 
 function getInitialTodayRange(): DateRange {
   const today = new Date();
   const from = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime() / 1000);
   const to = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime() / 1000);
   return { from, to };
-}
-
-const PAGE_SIZE = 15;
-
-/** Phone number that copies itself on click — same affordance as the receivers page. */
-function CopyablePhone({ phone }: { phone: string }) {
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        if (await copyText(fmtPhone(phone))) {
-          toast.success(`Copied ${fmtPhoneGrouped(phone)}`);
-        } else {
-          toast.error("Couldn't copy to clipboard");
-        }
-      }}
-      title={`Click to copy ${fmtPhoneGrouped(phone)}`}
-      className="group/copy inline-flex min-w-0 cursor-copy items-center gap-1 rounded text-inherit transition-colors hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-brass"
-    >
-      <span className="truncate">{fmtPhoneGrouped(phone)}</span>
-      <Copy
-        className="h-3 w-3 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover/copy:opacity-100"
-        strokeWidth={1.75}
-        aria-hidden="true"
-      />
-    </button>
-  );
 }
 
 function getPaginationRange(current: number, total: number): (number | "...")[] {
@@ -153,6 +94,40 @@ function HistorySkeleton() {
         </div>
       </section>
     </div>
+  );
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Phone number that copies itself on click — same affordance as the receivers page. */
+function CopyablePhone({ phone }: { phone: string }) {
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        if (await copyText(fmtPhone(phone))) {
+          toast.success(`Copied ${fmtPhoneGrouped(phone)}`);
+        } else {
+          toast.error("Couldn't copy to clipboard");
+        }
+      }}
+      title={`Click to copy ${fmtPhoneGrouped(phone)}`}
+      className="group/copy inline-flex min-w-0 cursor-copy items-center gap-1 rounded text-inherit transition-colors hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-brass"
+    >
+      <span className="truncate">{fmtPhoneGrouped(phone)}</span>
+      <Copy
+        className="h-3 w-3 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover/copy:opacity-100"
+        strokeWidth={1.75}
+        aria-hidden="true"
+      />
+    </button>
   );
 }
 
@@ -237,94 +212,93 @@ function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDel
 }
 
 export default function HistoryPage() {
-  const [rows, setRows] = useState<Transfer[]>([]);
-  // Every transfer in the selected range, LIMIT excluded — when this exceeds
-  // rows.length the view was trimmed to the latest rows and must say so.
-  const [total, setTotal] = useState<number | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  // ---- Server-driven view state -------------------------------------------
   const [dateRange, setDateRange] = useState<DateRange>(getInitialTodayRange);
   const [filter, setFilter] = useState<Filter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  /** Committed after the debounce — what the server actually searches for. */
+  const [query, setQuery] = useState("");
   const [pageSize, setPageSize] = useState<number>(10);
   const [page, setPage] = useState(1);
+
+  const [data, setData] = useState<HistoryPage | null>(null);
+  const [initialLoaded, setInitialLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // ---- Delete dialog state -------------------------------------------------
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmAmount, setConfirmAmount] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  const dateRangeRef = useRef(dateRange);
+  const transfers = data?.transfers ?? NO_ROWS;
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(Math.max(1, page), pageCount);
+  const hasFilters = filter !== "all" || query !== "";
+
+  // Typing waits out a short debounce, then one request hits the server.
   useEffect(() => {
-    dateRangeRef.current = dateRange;
-  }, [dateRange]);
+    const t = setTimeout(() => setQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
-  const loadData = useCallback((background = false) => {
-    if (!background) setLoaded(false);
-    const opts = background ? { bypassCache: true, noDelay: true } : undefined;
-    const r = background ? dateRangeRef.current : dateRange;
-    fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, opts)
-      .then(({ transfers, total }) => {
-        setRows(transfers);
-        setTotal(total);
-      })
-      .catch(() => {})
-      .finally(() => setLoaded(true));
-  }, [dateRange]);
+  const runFetch = useCallback(
+    (opts?: { bypass?: boolean }) => {
+      setLoading(true);
+      if (opts?.bypass) invalidateCache("history");
+      fetchHistoryPage(
+        {
+          from: dateRange.from ?? undefined,
+          to: dateRange.to ?? undefined,
+          status: filter !== "all" ? filter : undefined,
+          q: query || undefined,
+          page,
+          pageSize,
+        },
+        { bypassCache: opts?.bypass, noDelay: true }
+      )
+        .then((res) => setData(res))
+        .catch(() => {})
+        .finally(() => {
+          setLoading(false);
+          setInitialLoaded(true);
+        });
+    },
+    [dateRange, filter, query, page, pageSize]
+  );
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    runFetch();
+  }, [runFetch]);
 
-  // Shared app-wide EventSource: refetch on pushes, reconnect with backoff.
-  useLive(() => {
-    invalidateCache("history");
-    const r = dateRangeRef.current;
-    fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, { bypassCache: true, noDelay: true })
-      .then(({ transfers, total }) => {
-        setRows(transfers);
-        setTotal(total);
-      })
-      .catch(() => {});
+  // The SSE subscription registers once — point it at the freshest fetcher.
+  const fetchRef = useRef(runFetch);
+  useEffect(() => {
+    fetchRef.current = runFetch;
   });
+  useLive(() => fetchRef.current({ bypass: true }));
 
-  const filtered = useMemo(() => {
-    const trimmed = searchQuery.trim();
-    const q = trimmed.toLowerCase().replace(/[\s-+]/g, "");
-    const searchLower = trimmed.toLowerCase();
+  // Deletions can strand us past the last page; fall back onto it.
+  useEffect(() => {
+    if (data && page > pageCount) setPage(pageCount);
+  }, [data, page, pageCount]);
 
-    return rows.filter((r) => {
-      const statusMatch = filter === "all" || r.status === filter;
-      if (!statusMatch) return false;
-      if (!trimmed) return true;
+  // CSV download link carries the exact filters the table shows.
+  const exportHref = useMemo(() => {
+    const p = new URLSearchParams();
+    if (dateRange.from) p.set("from", String(dateRange.from));
+    if (dateRange.to) p.set("to", String(dateRange.to));
+    if (filter !== "all") p.set("status", filter);
+    if (query) p.set("q", query);
+    const s = p.toString();
+    return s ? `/api/history/export?${s}` : "/api/history/export";
+  }, [dateRange, filter, query]);
 
-      // Match either phone in any equivalent digit form — senders live as
-      // 959…, receivers as typed (09…), so a plain substring on one form
-      // silently misses the other. phoneSearchKeys bridges the formats.
-      if (
-        phoneSearchKeys(r.sender_phone).some((k) => k.includes(q)) ||
-        phoneSearchKeys(r.receiver_phone).some((k) => k.includes(q))
-      ) {
-        return true;
-      }
-
-      if (r.message && r.message.toLowerCase().includes(searchLower)) return true;
-      if (String(r.amount).includes(trimmed)) return true;
-      if (r.error_code !== null && String(r.error_code).includes(trimmed)) return true;
-
-      return false;
-    });
-  }, [rows, filter, searchQuery]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(Math.max(1, page), totalPages);
-
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, currentPage, pageSize]);
-
+  // Group the visible page by day for the dated sections.
   const days = useMemo(() => {
     const buckets = new Map<string, Transfer[]>();
-    for (const t of paginatedRows) {
+    for (const t of transfers) {
       const key = dayKey(t.created_at);
       const bucket = buckets.get(key);
       if (bucket) bucket.push(t);
@@ -343,7 +317,7 @@ export default function HistoryPage() {
         };
       })
       .sort((a, b) => b.rows[0].created_at - a.rows[0].created_at);
-  }, [paginatedRows]);
+  }, [transfers]);
 
   function handleFilterChange(val: Filter) {
     setFilter(val);
@@ -351,7 +325,14 @@ export default function HistoryPage() {
   }
 
   function handleSearchChange(val: string) {
-    setSearchQuery(val);
+    setSearchInput(val);
+    setPage(1);
+  }
+
+  /** Skip the debounce — used by Enter and click-to-filter shortcuts. */
+  function applyQueryNow(val: string) {
+    setSearchInput(val);
+    setQuery(val.trim());
     setPage(1);
   }
 
@@ -363,22 +344,24 @@ export default function HistoryPage() {
   async function confirmDelete() {
     if (!deleteId) return;
     setIsDeleting(true);
-    
-    const transferToDelete = rows.find(r => r.id === deleteId);
+
+    const transferToDelete = transfers.find((r) => r.id === deleteId);
     const isHighValue = transferToDelete ? transferToDelete.amount >= 5000 : false;
 
     try {
       const res = await fetch("/api/history", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           id: deleteId,
-          ...(isHighValue ? { password: confirmPassword, totpCode: confirmPassword } : {})
+          ...(isHighValue ? { password: confirmPassword, totpCode: confirmPassword } : {}),
         }),
       }).then((r) => r.json());
       if (res.ok) {
-        setRows((r) => r.filter((x) => x.id !== deleteId));
         toast.success("Record deleted");
+        // Removing the last row of a later page should land on its predecessor.
+        if ((data?.transfers.length ?? 0) === 1 && page > 1) setPage((p) => p - 1);
+        else runFetch({ bypass: true });
       } else {
         toast.error("Failed to delete", { description: res.error });
       }
@@ -392,7 +375,7 @@ export default function HistoryPage() {
     }
   }
 
-  if (!loaded) {
+  if (!initialLoaded) {
     return <HistorySkeleton />;
   }
 
@@ -400,15 +383,8 @@ export default function HistoryPage() {
     <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="whitespace-nowrap font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
-          {searchQuery.trim() || filter !== "all" ? (
-            <>
-              {filtered.length} of {rows.length} {rows.length === 1 ? "attempt" : "attempts"}
-            </>
-          ) : (
-            <>
-              {rows.length} {rows.length === 1 ? "attempt" : "attempts"}
-            </>
-          )}
+          {fmtAmount(total)} {total === 1 ? "attempt" : "attempts"}
+          {hasFilters && <span className="text-ink-faint"> · filtered</span>}
         </span>
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -424,15 +400,18 @@ export default function HistoryPage() {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
             <input
               type="text"
-              value={searchQuery}
+              value={searchInput}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search sender, receiver, error..."
+              onKeyDown={(e) => {
+                if (e.key === "Enter") applyQueryNow(searchInput);
+              }}
+              placeholder="Search sender, receiver, amount, error..."
               className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
             />
-            {searchQuery && (
+            {searchInput && (
               <button
                 type="button"
-                onClick={() => handleSearchChange("")}
+                onClick={() => applyQueryNow("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink"
                 title="Clear search"
               >
@@ -453,37 +432,22 @@ export default function HistoryPage() {
             ]}
           />
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => exportCsv(filtered)}
-            disabled={filtered.length === 0}
-            title="Download the filtered rows as CSV"
-          >
-            <Download className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-            CSV
+          {/* Server builds the CSV from every matching row, not just this page. */}
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href={exportHref}
+              title="Download every matching record as CSV"
+              aria-disabled={total === 0}
+              className={cn("inline-flex items-center gap-1.5", total === 0 && "pointer-events-none opacity-50")}
+            >
+              <Download className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              CSV
+            </a>
           </Button>
         </div>
       </div>
 
-      {/* The API serves only the latest rows per view — when the range holds
-          more, say so instead of silently hiding the oldest records. */}
-      {total !== null && total > rows.length && (
-        <div className="flex items-start gap-2.5 rounded border border-brass/50 bg-brass-wash px-4 py-3">
-          <AlertTriangle
-            className="mt-0.5 h-4 w-4 shrink-0 text-brass-deep"
-            strokeWidth={1.75}
-            aria-hidden="true"
-          />
-          <p className="text-xs leading-relaxed text-brass-deep">
-            Showing the latest {fmtAmount(rows.length)} of {fmtAmount(total)} records in this
-            view. Older records are trimmed from this page and from the CSV export — narrow
-            the date range to reach them.
-          </p>
-        </div>
-      )}
-
-      {loaded && rows.length === 0 && (
+      {total === 0 && !hasFilters && (
         <div className="rounded border border-hairline bg-card">
           <EmptyState
             icon={
@@ -532,7 +496,7 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {loaded && rows.length > 0 && filtered.length === 0 && (
+      {total === 0 && hasFilters && (
         <div className="rounded border border-hairline bg-card">
           <EmptyState
             icon={
@@ -545,8 +509,8 @@ export default function HistoryPage() {
             }
             title="No transfers match your search"
             body={
-              searchQuery.trim()
-                ? `No transfers found matching "${searchQuery}". Try searching by a different phone number or status.`
+              searchInput.trim()
+                ? `No transfers found matching "${searchInput}". Try searching by a different phone number or status.`
                 : `No ${filter === "failed" ? "failed" : filter === "pending" ? "pending" : "successful"} transfers in the log.`
             }
             action={
@@ -554,9 +518,8 @@ export default function HistoryPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setSearchQuery("");
+                  applyQueryNow("");
                   setFilter("all");
-                  setPage(1);
                 }}
               >
                 Clear filter & search
@@ -566,163 +529,177 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {days.map((day) => (
-        <section key={day.key}>
-          <div className="flex items-baseline justify-between gap-4 pb-2">
-            <h2 className="font-mono text-eyebrow font-semibold uppercase tnum text-ink">
-              {day.label}
-            </h2>
-            <span className="font-mono text-eyebrow uppercase tnum text-ink-faint">
-              {day.sent} sent · {fmtAmount(day.volume)} Ks
-            </span>
-          </div>
+      {/* Refetches hold the previous page and dim it — skeletons are for the
+          very first visit only, so live pushes never make the log flicker. */}
+      <div
+        className={cn(
+          "space-y-5 transition-opacity",
+          loading && "opacity-50 pointer-events-none"
+        )}
+      >
+        {/* The framed log: every dated section scrolls in here while the
+            controls above and pagination below stay put. */}
+        <div className={cn(LOG_VIEWPORT, "overflow-y-auto overscroll-contain space-y-5 pr-1")}>
+          {days.map((day) => (
+          <section key={day.key}>
+            <div className="flex items-baseline justify-between gap-4 pb-2">
+              <h2 className="font-mono text-eyebrow font-semibold uppercase tnum text-ink">
+                {day.label}
+              </h2>
+              <span className="font-mono text-eyebrow uppercase tnum text-ink-faint">
+                {day.sent} sent · {fmtAmount(day.volume)} Ks
+              </span>
+            </div>
 
-          <div className="overflow-hidden rounded border border-hairline bg-card">
-            <ul className="divide-y divide-hairline">
-              {day.rows.map((t) => {
-                const badge = statusBadge(t.status);
-                const failed = t.status === "failed";
-                const reason =
-                  t.message ?? (t.error_code !== null ? `Error ${t.error_code}` : null);
-                return (
-                  <li key={t.id} className="p-0 m-0 border-0 bg-card">
-                    <SwipeableRow onDelete={() => setDeleteId(t.id)}>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                        <StatusDot tone={badge.tone} size="sm" />
-                        <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
-                          {fmtClock(t.created_at)}
-                        </span>
-
-                        {/* Narrow screens reorder to two lines — clock and money on the
-                            first, the phone pair on the second — so amounts stay in a
-                            single right-hand column instead of each row growing a third line.
-                            Either number copies itself on hover/click. */}
-                        <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
-                          <CopyablePhone phone={t.sender_phone} />
-                          <ArrowRight
-                            className="h-3 w-3 shrink-0 text-brass"
-                            strokeWidth={2}
-                            aria-hidden="true"
-                          />
-                          <CopyablePhone phone={t.receiver_phone} />
-                        </span>
-
-                        <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
-                          <span className="font-mono text-sm tnum text-brass-deep">
-                            {fmtAmount(t.amount)}
+            <div className="overflow-hidden rounded border border-hairline bg-card">
+              <ul className="divide-y divide-hairline">
+                {day.rows.map((t) => {
+                  const badge = statusBadge(t.status);
+                  const failed = t.status === "failed";
+                  const reason =
+                    t.message ?? (t.error_code !== null ? `Error ${t.error_code}` : null);
+                  return (
+                    <li key={t.id} className="p-0 m-0 border-0 bg-card">
+                      <SwipeableRow onDelete={() => setDeleteId(t.id)}>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <StatusDot tone={badge.tone} size="sm" />
+                          <span className="shrink-0 font-mono text-xs tnum text-ink-mute">
+                            {fmtClock(t.created_at)}
                           </span>
-                          <span className="ml-2 font-mono text-xs tnum text-ink-faint">
-                            +{fmtAmount(t.fee)} fee
-                          </span>
-                        </span>
-                      </div>
 
-                      {failed && reason && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleSearchChange(reason.startsWith("Error ") ? reason.slice(6) : reason)
-                          }
-                          title="Show transfers with this error"
-                          className="mt-1.5 ml-[18px] block max-w-full truncate text-left text-xs text-alert-deep underline decoration-dotted underline-offset-2 transition-colors hover:text-alert"
-                        >
-                          {reason}
-                        </button>
-                      )}
-                      {!failed && t.status !== "success" && (
-                        <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">
-                          {badge.label}
+                          {/* Narrow screens reorder to two lines — clock and money on the
+                              first, the phone pair on the second — so amounts stay in a
+                              single right-hand column instead of each row growing a third line.
+                              Either number copies itself on hover/click. */}
+                          <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
+                            <CopyablePhone phone={t.sender_phone} />
+                            <ArrowRight
+                              className="h-3 w-3 shrink-0 text-brass"
+                              strokeWidth={2}
+                              aria-hidden="true"
+                            />
+                            <CopyablePhone phone={t.receiver_phone} />
+                          </span>
+
+                          <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
+                            <span className="font-mono text-sm tnum text-brass-deep">
+                              {fmtAmount(t.amount)}
+                            </span>
+                            <span className="ml-2 font-mono text-xs tnum text-ink-faint">
+                              +{fmtAmount(t.fee)} fee
+                            </span>
+                          </span>
                         </div>
-                      )}
-                    </SwipeableRow>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </section>
-      ))}
 
-      {/* Pagination & Page Size Controls */}
-      {filtered.length > 0 && (
-        <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-5 sm:flex-row">
-          <div className="flex flex-wrap items-center gap-3 font-mono text-eyebrow uppercase tnum text-ink-mute">
-            <span>
-              Showing {(currentPage - 1) * pageSize + 1}–
-              {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} transfers
-            </span>
-            <span className="hidden text-hairline-strong sm:inline">·</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-ink-faint">Rows:</span>
-              {[10, 20, 50].map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => handlePageSizeChange(size)}
-                  className={cn(
-                    "rounded px-2 py-0.5 font-mono text-xs transition-colors",
-                    pageSize === size
-                      ? "bg-ink font-semibold text-substrate shadow-sm"
-                      : "border border-hairline bg-card text-ink-mute hover:border-hairline-strong hover:bg-substrate hover:text-ink"
-                  )}
-                >
-                  {size}
-                </button>
-              ))}
+                        {failed && reason && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              applyQueryNow(reason.startsWith("Error ") ? reason.slice(6) : reason)
+                            }
+                            title="Show transfers with this error"
+                            className="mt-1.5 ml-[18px] block max-w-full truncate text-left text-xs text-alert-deep underline decoration-dotted underline-offset-2 transition-colors hover:text-alert"
+                          >
+                            {reason}
+                          </button>
+                        )}
+                        {!failed && t.status !== "success" && (
+                          <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">
+                            {badge.label}
+                          </div>
+                        )}
+                      </SwipeableRow>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
-          </div>
+          </section>
+        ))}
 
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="secondary"
-                size="icon-sm"
-                disabled={currentPage <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                aria-label="Previous page"
-                title="Previous page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-
-              <div className="flex items-center gap-1">
-                {getPaginationRange(currentPage, totalPages).map((p, idx) =>
-                  p === "..." ? (
-                    <span key={`ellipsis-${idx}`} className="px-1.5 font-mono text-xs text-ink-faint">
-                      …
-                    </span>
-                  ) : (
-                    <button
-                      key={`page-${p}`}
-                      type="button"
-                      onClick={() => setPage(p)}
-                      className={cn(
-                        "h-8 min-w-[2rem] rounded px-2 font-mono text-xs font-medium transition-colors",
-                        currentPage === p
-                          ? "bg-ink text-substrate shadow-sm"
-                          : "border border-hairline bg-card text-ink hover:border-hairline-strong hover:bg-substrate"
-                      )}
-                    >
-                      {p}
-                    </button>
-                  )
-                )}
-              </div>
-
-              <Button
-                variant="secondary"
-                size="icon-sm"
-                disabled={currentPage >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                aria-label="Next page"
-                title="Next page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
         </div>
-      )}
+
+        {/* Pagination & Page Size Controls */}
+        {total > 0 && (
+          <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-5 sm:flex-row">
+            <div className="flex flex-wrap items-center gap-3 font-mono text-eyebrow uppercase tnum text-ink-mute">
+              <span>
+                Showing {(currentPage - 1) * pageSize + 1}–
+                {Math.min(currentPage * pageSize, total)} of {fmtAmount(total)} transfers
+              </span>
+              <span className="hidden text-hairline-strong sm:inline">·</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-ink-faint">Rows:</span>
+                {[10, 20, 50].map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    onClick={() => handlePageSizeChange(size)}
+                    className={cn(
+                      "rounded px-2 py-0.5 font-mono text-xs transition-colors",
+                      pageSize === size
+                        ? "bg-ink font-semibold text-substrate shadow-sm"
+                        : "border border-hairline bg-card text-ink-mute hover:border-hairline-strong hover:bg-substrate hover:text-ink"
+                    )}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {pageCount > 1 && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="icon-sm"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="flex items-center gap-1">
+                  {getPaginationRange(currentPage, pageCount).map((p, idx) =>
+                    p === "..." ? (
+                      <span key={`ellipsis-${idx}`} className="px-1.5 font-mono text-xs text-ink-faint">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={`page-${p}`}
+                        type="button"
+                        onClick={() => setPage(p)}
+                        className={cn(
+                          "h-8 min-w-[2rem] rounded px-2 font-mono text-xs font-medium transition-colors",
+                          currentPage === p
+                            ? "bg-ink text-substrate shadow-sm"
+                            : "border border-hairline bg-card text-ink hover:border-hairline-strong hover:bg-substrate"
+                        )}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <Button
+                  variant="secondary"
+                  size="icon-sm"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                  aria-label="Next page"
+                  title="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Delete Confirmation */}
       <Dialog 
@@ -737,7 +714,7 @@ export default function HistoryPage() {
       >
         <DialogContent>
           {(() => {
-            const transferToDelete = rows.find(r => r.id === deleteId);
+            const transferToDelete = transfers.find(r => r.id === deleteId);
             const isHighValue = transferToDelete ? transferToDelete.amount >= 5000 : false;
             const canDelete = isHighValue 
               ? confirmAmount === String(transferToDelete?.amount) && confirmPassword.length > 0

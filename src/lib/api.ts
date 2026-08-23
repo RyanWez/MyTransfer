@@ -83,24 +83,67 @@ export async function fetchSims(opts?: { bypassCache?: boolean; noDelay?: boolea
   return data.sims ?? [];
 }
 
-/** Fetch transfer history with promise deduplication and short-term caching. */
-export async function fetchHistory(
-  from?: number,
-  to?: number,
-  limit?: number,
+/** One page of the History log — search/filter/paging all resolve server-side. */
+export interface HistoryQuery {
+  from?: number;
+  to?: number;
+  status?: string;
+  q?: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface HistoryPage {
+  transfers: Transfer[];
+  /** Total transfers matching the query, paging excluded. */
+  total: number;
+}
+
+/** Fetch one History page with promise deduplication and short-term caching. */
+export async function fetchHistoryPage(
+  query: HistoryQuery,
   opts?: { bypassCache?: boolean; noDelay?: boolean }
-): Promise<{ transfers: Transfer[]; total: number }> {
-  const params = new URLSearchParams();
-  if (from !== undefined) params.set("from", String(from));
-  if (to !== undefined) params.set("to", String(to));
-  if (limit !== undefined) params.set("limit", String(limit));
-  const query = params.toString() ? `?${params.toString()}` : "";
-  const key = `history:${from ?? "all"}:${to ?? "all"}:${limit ?? "def"}`;
-  const data = await cachedFetch<{ ok: boolean; transfers: Transfer[]; total: number }>(
+): Promise<HistoryPage> {
+  const params = new URLSearchParams({
+    page: String(query.page),
+    pageSize: String(query.pageSize),
+  });
+  if (query.from !== undefined) params.set("from", String(query.from));
+  if (query.to !== undefined) params.set("to", String(query.to));
+  if (query.status) params.set("status", query.status);
+  if (query.q) params.set("q", query.q);
+
+  const key = `history:${query.from ?? "all"}:${query.to ?? "all"}:${query.status ?? "all"}:${query.q ?? ""}:${query.page}:${query.pageSize}`;
+  const data = await cachedFetch<HistoryPage & { ok: boolean }>(
     key,
-    `/api/history${query}`,
-    2500,
+    `/api/history?${params.toString()}`,
+    1500,
     opts
   );
   return { transfers: data.transfers ?? [], total: data.total ?? 0 };
+}
+
+/**
+ * Every transfer in a range, paged through the API behind the scenes — for
+ * views that genuinely need the full set (Receivers aggregation). Bounded by
+ * a generous page count so a runaway total can't loop forever.
+ */
+export async function fetchAllTransfers(
+  from?: number,
+  to?: number,
+  opts?: { bypassCache?: boolean; noDelay?: boolean }
+): Promise<Transfer[]> {
+  const pageSize = 1000;
+  const maxPages = 200; // 200k rows ceiling
+  const out: Transfer[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const { transfers, total } = await fetchHistoryPage(
+      { from, to, page, pageSize },
+      opts
+    );
+    out.push(...transfers);
+    if (transfers.length === 0 || out.length >= total) break;
+  }
+  return out;
 }

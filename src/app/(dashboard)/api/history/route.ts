@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbApi } from "@/lib/db";
 import { authenticator } from "otplib";
+import { parseTransfersFilter } from "@/lib/historyFilter";
 
 export async function GET(req: NextRequest) {
-  const limitParam = Number(req.nextUrl.searchParams.get("limit"));
-  const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 5000) : 5000;
-  
-  const fromParam = req.nextUrl.searchParams.get("from");
-  const toParam = req.nextUrl.searchParams.get("to");
-  const fromTs = fromParam ? Number(fromParam) : undefined;
-  const toTs = toParam ? Number(toParam) : undefined;
+  // Search, status filter and range all resolve in SQL — the page asks for
+  // exactly one slice, so payload size stays constant as the log grows.
+  const { fromTs, toTs, status, q, page, pageSize } = parseTransfersFilter(req);
 
-  const validFrom = fromTs !== undefined && Number.isFinite(fromTs) ? fromTs : undefined;
-  const validTo = toTs !== undefined && Number.isFinite(toTs) ? toTs : undefined;
+  const { rows, total } = dbApi.listTransfersFiltered(
+    { fromTs, toTs, status, q: q || undefined },
+    pageSize,
+    (page - 1) * pageSize
+  );
 
   return NextResponse.json({
     ok: true,
-    transfers: dbApi.listTransfers(limit, validFrom, validTo),
-    // Count of every transfer in the range, LIMIT excluded — the client uses
-    // this to warn when its view was trimmed to the latest `limit` rows.
-    total: dbApi.countTransfers(validFrom, validTo),
+    transfers: rows,
+    total,
+    page,
+    pageSize,
   });
 }
 

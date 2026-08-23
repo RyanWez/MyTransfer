@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import { sse } from "./events";
+import { phoneSearchKeys } from "./format";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -80,6 +81,73 @@ export interface TransferRow {
 }
 
 const now = () => Math.floor(Date.now() / 1000);
+
+// ---- Filtered listing (History) --------------------------------------------
+
+export interface TransfersFilter {
+  fromTs?: number;
+  toTs?: number;
+  status?: string;
+  /**
+   * Free-text query. Mirrors the historical client-side semantics: phones
+   * match in any digit form (959… / 09… / 9…), plus message substring,
+   * amount substring and error-code substring.
+   */
+  q?: string;
+}
+
+/** Escape LIKE wildcards so a query like "50%" matches literally. */
+function likePattern(value: string): string {
+  return `%${value.replace(/[\\%_]/g, (m) => "\\" + m)}%`;
+}
+
+/**
+ * Shared WHERE fragment for listing and counting. SQLite's LIKE is already
+ * case-insensitive for ASCII, which covers the English messages we store.
+ */
+function transfersWhereClause(f: TransfersFilter): { sql: string; args: unknown[] } {
+  const clauses: string[] = [];
+  const args: unknown[] = [];
+
+  if (f.fromTs !== undefined) {
+    clauses.push("created_at >= ?");
+    args.push(f.fromTs);
+  }
+  if (f.toTs !== undefined) {
+    clauses.push("created_at <= ?");
+    args.push(f.toTs);
+  }
+  if (f.status) {
+    clauses.push("status = ?");
+    args.push(f.status);
+  }
+
+  const q = f.q?.trim();
+  if (q) {
+    // Same cleaning the old client-side search used for numbers.
+    const qClean = q.toLowerCase().replace(/[\s-+]/g, "");
+    const qLower = q.toLowerCase();
+
+    const ors = [
+      "lower(message) LIKE ? ESCAPE '\\'",
+      "CAST(amount AS TEXT) LIKE ? ESCAPE '\\'",
+      "(error_code IS NOT NULL AND CAST(error_code AS TEXT) LIKE ? ESCAPE '\\')",
+    ];
+    const orArgs: unknown[] = [likePattern(qLower), likePattern(qClean), likePattern(qClean)];
+
+    // A number typed in any form must hit rows stored in another form —
+    // senders live as 959…, receivers as whatever was typed.
+    for (const key of phoneSearchKeys(q)) {
+      ors.push("sender_phone LIKE ? ESCAPE '\\'", "receiver_phone LIKE ? ESCAPE '\\'");
+      orArgs.push(likePattern(key), likePattern(key));
+    }
+
+    clauses.push(`(${ors.join(" OR ")})`);
+    args.push(...orArgs);
+  }
+
+  return { sql: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", args };
+}
 
 const startOfToday = () => {
   const d = new Date();
@@ -293,6 +361,31 @@ export const dbApi = {
       return (stmtCountTransfersRange.get(fromTs, toTs) as { c: number }).c;
     }
     return (stmtCountTransfersAll.get() as { c: number }).c;
+  },
+
+  /**
+   * Filtered + paged listing for the History page. Search, status and range
+   * all resolve in SQL, so results stay correct no matter how large the log
+   * grows — the page never needs to hold every row in memory.
+   *
+   * The WHERE clause is built dynamically, but every value is a bound
+   * parameter; only the clause shape varies with which filters are present.
+   */
+  listTransfersFiltered(
+    f: TransfersFilter,
+    limit: number,
+    offset: number
+  ): { rows: TransferRow[]; total: number } {
+    const { sql, args } = transfersWhereClause(f);
+    const rows = db
+      .prepare(
+        `SELECT * FROM transfers ${sql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
+      )
+      .all(...args, limit, offset) as TransferRow[];
+    const total = (db
+      .prepare(`SELECT COUNT(*) c FROM transfers ${sql}`)
+      .get(...args) as { c: number }).c;
+    return { rows, total };
   },
 
   deleteTransfer(id: number) {
