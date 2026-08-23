@@ -366,6 +366,7 @@ export default function TransferPage() {
               }
             }}
             disabled={locked}
+            autoFocus
             placeholder="09XXXXXXXXX"
             inputMode="numeric"
             autoComplete="off"
