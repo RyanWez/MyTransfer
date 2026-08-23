@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { MetricStrip } from "@/components/MetricStrip";
 import { TrendChart } from "@/components/TrendChart";
 import { RangePicker } from "@/components/RangePicker";
+import { CountUp } from "@/components/CountUp";
 import {
   fmtAmount,
   fmtClock,
@@ -23,6 +24,7 @@ import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart"
 import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { fetchStats, invalidateCache } from "@/lib/api";
+import { useLive } from "@/lib/liveEvents";
 import type { StatsResponse } from "@/lib/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -66,40 +68,15 @@ export default function DashboardPage() {
     };
   }, [range]);
 
-  useEffect(() => {
-    let retries = 0;
-    let es: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function connect() {
-      es = new EventSource("/api/events");
-      es.onmessage = (e) => {
-        if (e.data === "update") {
-          invalidateCache();
-          const r = rangeRef.current;
-          fetchStats(r.from, r.to, { bypassCache: true, noDelay: true })
-            .then((d: StatsResponse) => setData(d))
-            .catch(() => {});
-        }
-      };
-      es.onerror = () => {
-        es?.close();
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        const delay = Math.min(1000 * 2 ** retries++, 30000);
-        reconnectTimer = setTimeout(connect, delay);
-      };
-      es.onopen = () => {
-        retries = 0;
-      };
-    }
-
-    connect();
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      es?.close();
-    };
-  }, []);
+  // One shared EventSource app-wide — pushes land here while the tab is open.
+  // Connection health shows as the LED in the sidebar footer.
+  useLive(() => {
+    invalidateCache();
+    const r = rangeRef.current;
+    fetchStats(r.from, r.to, { bypassCache: true, noDelay: true })
+      .then((d: StatsResponse) => setData(d))
+      .catch(() => {});
+  });
 
   const onPreset = useCallback((key: RangeKey) => {
     setPreset(key);
@@ -191,7 +168,11 @@ export default function DashboardPage() {
       <section className="animate-rise-in">
         <Eyebrow>Total available</Eyebrow>
         <div className="mt-2 font-mono text-hero tnum text-brass-deep">
-          {stats ? fmtAmount(stats.totalBalance) : "—"}
+          {stats ? (
+            <CountUp value={stats.totalBalance} format={fmtAmount} />
+          ) : (
+            "—"
+          )}
           {/* tracking-normal: the hero's negative tracking is a px value, so a small
               child would inherit it as a much larger proportion. */}
           <span className="ml-2 align-baseline text-lg font-normal tracking-normal text-ink-mute">
@@ -226,19 +207,22 @@ export default function DashboardPage() {
             items={[
               { 
                 label: `Success ${period}`, 
-                value: fmtAmount(totals?.sent ?? 0),
+                value: totals?.sent ?? 0,
+                format: fmtAmount,
                 sub: totals ? `${Math.round((totals.sent / Math.max(1, totals.sent + totals.failed)) * 100)}% success rate` : undefined,
               },
               {
                 label: `Volume ${period}`,
-                value: fmtAmount(totals?.volume ?? 0),
+                value: totals?.volume ?? 0,
+                format: fmtAmount,
                 sub: "Ks, fees excluded",
                 // Brass means money — a zero isn't money worth pointing at.
                 tone: totals?.volume ? "brass" : "muted",
               },
               {
                 label: `Volume (-20%) ${period}`,
-                value: fmtAmount(Math.round((totals?.volume ?? 0) * 0.8)),
+                value: Math.round((totals?.volume ?? 0) * 0.8),
+                format: fmtAmount,
                 sub: "Ks, 20% deducted",
                 tone: totals?.volume ? "brass" : "muted",
               },

@@ -3,9 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Menu, Plus } from "lucide-react";
+import { LogOut, Menu, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { OPEN_COMMAND_PALETTE } from "@/components/CommandPalette";
 
 const PAGES: Record<string, { title: string; sub: string }> = {
   "/": { title: "Overview", sub: "Balances, daily capacity, and today's transfers" },
@@ -54,6 +55,16 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_PALETTE))}
+            aria-label="Search"
+            title="Search (Ctrl K)"
+            className="text-ink-mute hover:text-ink hover:bg-card border border-transparent hover:border-hairline transition-all duration-200"
+          >
+            <Search className="h-4 w-4" strokeWidth={1.8} />
+          </Button>
           <ThemeToggle />
           {pathname !== "/transfer" && (
             <Button asChild size="sm">

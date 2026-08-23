@@ -31,24 +31,31 @@ const DialogContent = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      onInteractOutside={(e) => {
-        e.preventDefault();
-      }}
-      className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-5 rounded-lg border border-hairline bg-card p-6 shadow-dialog duration-200",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-        className
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded text-ink-faint transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">
-        <X className="h-4 w-4" strokeWidth={1.5} />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
+    {/* Centering lives on this wrapper, NOT on the content: the animate-in
+        keyframes replace `transform` while playing, so a translate-centered
+        panel visibly slides in from the bottom-right before snapping to place.
+        A static wrapper keeps the enter animation a pure center zoom/fade.
+        pointer-events-none lets outside clicks fall through to the overlay. */}
+    <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center overflow-y-auto p-4">
+      <DialogPrimitive.Content
+        ref={ref}
+        onInteractOutside={(e) => {
+          e.preventDefault();
+        }}
+        className={cn(
+          "pointer-events-auto relative grid w-full max-w-md gap-5 rounded-lg border border-hairline bg-card p-6 shadow-dialog duration-200",
+          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          className
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded text-ink-faint transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2">
+          <X className="h-4 w-4" strokeWidth={1.5} />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </div>
   </DialogPortal>
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;

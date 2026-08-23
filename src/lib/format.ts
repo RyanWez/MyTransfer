@@ -42,6 +42,23 @@ export function sameNumber(a: string, b: string): boolean {
   return ta.length === 9 && ta === tail(b);
 }
 
+/**
+ * Every digit form that means this same number, so search matches across
+ * formats: senders are stored as `959…` (normalizeMsisdn) while receivers keep
+ * whatever was typed (`09…`, `959…`, even bare `9…`). A query in one form must
+ * still hit rows stored in another.
+ */
+export function phoneSearchKeys(phone: string): string[] {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return [];
+  const keys = new Set<string>([digits]);
+  const local = fmtPhone(digits); // 95… → 09…
+  keys.add(local);
+  keys.add(local.replace(/^0/, "")); // …without the leading zero: 9…
+  if (/^9\d{8,}$/.test(digits)) keys.add("0" + digits); // bare 9… → 09…
+  return [...keys];
+}
+
 export function fmtTime(ts: number): string {
   return new Date(ts * 1000).toLocaleString("en-GB", {
     day: "2-digit",

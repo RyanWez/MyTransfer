@@ -1,16 +1,38 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+// Covers next-themes' class flip plus the 300ms CSS crossfade in globals.css.
+const ANIM_MS = 400;
+let animTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Arms the global theme crossfade for one toggle, then disarms it. */
+function withThemeAnimation(apply: () => void) {
+  const root = document.documentElement;
+  root.classList.add("theme-anim");
+  apply();
+  if (animTimer) clearTimeout(animTimer);
+  animTimer = setTimeout(() => root.classList.remove("theme-anim"), ANIM_MS);
+}
 
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
+  const armedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
+    return () => {
+      // Never leave the slow-fade armed if the toggle unmounts mid-animation.
+      if (armedRef.current) {
+        document.documentElement.classList.remove("theme-anim");
+        armedRef.current = false;
+        if (animTimer) clearTimeout(animTimer);
+      }
+    };
   }, []);
 
   if (!mounted) {
@@ -21,7 +43,12 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon-sm"
-      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      onClick={() =>
+        withThemeAnimation(() => {
+          armedRef.current = true;
+          setTheme(resolvedTheme === "dark" ? "light" : "dark");
+        })
+      }
       aria-label="Toggle theme"
       title={resolvedTheme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
       className="relative text-ink-mute hover:text-ink hover:bg-card border border-transparent hover:border-hairline transition-all duration-200"

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, ChevronRight, ScrollText, Search, X, Trash2 } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
@@ -22,14 +22,58 @@ import {
   fmtAmount,
   fmtClock,
   fmtDayHeader,
+  fmtPhone,
   fmtPhoneGrouped,
+  phoneSearchKeys,
   statusBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fetchHistory, invalidateCache } from "@/lib/api";
+import { useLive } from "@/lib/liveEvents";
 import type { Transfer } from "@/lib/types";
 
 type Filter = "all" | "success" | "pending" | "failed";
+
+/** Download the given rows as CSV (Excel-friendly, BOM-prefixed). */
+function exportCsv(rows: Transfer[]) {
+  const esc = (v: string | number | null | undefined) => {
+    const s = v === null || v === undefined ? "" : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ["id", "datetime", "sender", "receiver", "amount", "fee", "status", "error_code", "message"];
+  const lines = rows.map((r) =>
+    [
+      r.id,
+      new Date(r.created_at * 1000).toISOString(),
+      r.sender_phone,
+      r.receiver_phone,
+      r.amount,
+      r.fee,
+      r.status,
+      r.error_code ?? "",
+      r.message ?? "",
+    ]
+      .map(esc)
+      .join(",")
+  );
+  // BOM so Excel opens the file as UTF-8 without an import wizard.
+  const csv = "\uFEFF" + [header.join(","), ...lines].join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `myshare-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function getInitialTodayRange(): DateRange {
   const today = new Date();
@@ -39,6 +83,31 @@ function getInitialTodayRange(): DateRange {
 }
 
 const PAGE_SIZE = 15;
+
+/** Phone number that copies itself on click — same affordance as the receivers page. */
+function CopyablePhone({ phone }: { phone: string }) {
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        if (await copyText(fmtPhone(phone))) {
+          toast.success(`Copied ${fmtPhoneGrouped(phone)}`);
+        } else {
+          toast.error("Couldn't copy to clipboard");
+        }
+      }}
+      title={`Click to copy ${fmtPhoneGrouped(phone)}`}
+      className="group/copy inline-flex min-w-0 cursor-copy items-center gap-1 rounded text-inherit transition-colors hover:text-ink focus:outline-none focus-visible:ring-1 focus-visible:ring-brass"
+    >
+      <span className="truncate">{fmtPhoneGrouped(phone)}</span>
+      <Copy
+        className="h-3 w-3 shrink-0 text-ink-faint opacity-0 transition-opacity group-hover/copy:opacity-100"
+        strokeWidth={1.75}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
 
 function getPaginationRange(current: number, total: number): (number | "...")[] {
   if (total <= 7) {
@@ -93,18 +162,28 @@ function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDel
   const startX = useRef(0);
   const currentX = useRef(0);
   const ACTION_WIDTH = 84;
+  // Pointer capture must wait for real drag intent: capturing on pointerdown
+  // retargets the whole gesture, so clicks on inner controls (copy phone,
+  // error filter) never reach their buttons.
+  const armed = useRef(false);
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    setIsDragging(true);
+    armed.current = true;
     startX.current = e.clientX;
     currentX.current = offset;
-    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
-    if (!isDragging) return;
+    if (!armed.current) return;
+
     const diff = e.clientX - startX.current;
+    if (!isDragging) {
+      if (Math.abs(diff) < 6) return; // still a tap/click — hands off
+      setIsDragging(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+
     let newOffset = currentX.current + diff;
     if (newOffset > 0) newOffset = 0;
     if (newOffset < -ACTION_WIDTH * 1.5) newOffset = -ACTION_WIDTH * 1.5;
@@ -112,14 +191,16 @@ function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDel
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!armed.current) return;
+    armed.current = false;
     if (!isDragging) return;
-    setIsDragging(false);
     if (offset < -ACTION_WIDTH / 2) {
       setOffset(-ACTION_WIDTH);
     } else {
       setOffset(0);
     }
     e.currentTarget.releasePointerCapture(e.pointerId);
+    setIsDragging(false);
   }
 
   return (
@@ -187,40 +268,14 @@ export default function HistoryPage() {
     loadData();
   }, [loadData]);
 
-  useEffect(() => {
-    let retries = 0;
-    let es: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function connect() {
-      es = new EventSource("/api/events");
-      es.onmessage = (e) => {
-        if (e.data === "update") {
-          invalidateCache("history");
-          const r = dateRangeRef.current;
-          fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, { bypassCache: true, noDelay: true })
-            .then((transfers) => setRows(transfers))
-            .catch(() => {});
-        }
-      };
-      es.onerror = () => {
-        es?.close();
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        const delay = Math.min(1000 * 2 ** retries++, 30000);
-        reconnectTimer = setTimeout(connect, delay);
-      };
-      es.onopen = () => {
-        retries = 0;
-      };
-    }
-
-    connect();
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      es?.close();
-    };
-  }, []);
+  // Shared app-wide EventSource: refetch on pushes, reconnect with backoff.
+  useLive(() => {
+    invalidateCache("history");
+    const r = dateRangeRef.current;
+    fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, { bypassCache: true, noDelay: true })
+      .then((transfers) => setRows(transfers))
+      .catch(() => {});
+  });
 
   const filtered = useMemo(() => {
     const trimmed = searchQuery.trim();
@@ -232,11 +287,15 @@ export default function HistoryPage() {
       if (!statusMatch) return false;
       if (!trimmed) return true;
 
-      const senderClean = r.sender_phone.toLowerCase().replace(/[\s-+]/g, "");
-      if (senderClean.includes(q)) return true;
-
-      const receiverClean = r.receiver_phone.toLowerCase().replace(/[\s-+]/g, "");
-      if (receiverClean.includes(q)) return true;
+      // Match either phone in any equivalent digit form — senders live as
+      // 959…, receivers as typed (09…), so a plain substring on one form
+      // silently misses the other. phoneSearchKeys bridges the formats.
+      if (
+        phoneSearchKeys(r.sender_phone).some((k) => k.includes(q)) ||
+        phoneSearchKeys(r.receiver_phone).some((k) => k.includes(q))
+      ) {
+        return true;
+      }
 
       if (r.message && r.message.toLowerCase().includes(searchLower)) return true;
       if (String(r.amount).includes(trimmed)) return true;
@@ -384,6 +443,17 @@ export default function HistoryPage() {
               { value: "failed", label: "Error" },
             ]}
           />
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportCsv(filtered)}
+            disabled={filtered.length === 0}
+            title="Download the filtered rows as CSV"
+          >
+            <Download className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+            CSV
+          </Button>
         </div>
       </div>
 
@@ -499,15 +569,16 @@ export default function HistoryPage() {
 
                         {/* Narrow screens reorder to two lines — clock and money on the
                             first, the phone pair on the second — so amounts stay in a
-                            single right-hand column instead of each row growing a third line. */}
+                            single right-hand column instead of each row growing a third line.
+                            Either number copies itself on hover/click. */}
                         <span className="order-3 flex min-w-0 flex-1 basis-full items-center gap-2 font-mono text-xs tnum text-ink-soft sm:order-none sm:basis-auto">
-                          <span className="truncate">{fmtPhoneGrouped(t.sender_phone)}</span>
+                          <CopyablePhone phone={t.sender_phone} />
                           <ArrowRight
                             className="h-3 w-3 shrink-0 text-brass"
                             strokeWidth={2}
                             aria-hidden="true"
                           />
-                          <span className="truncate">{fmtPhoneGrouped(t.receiver_phone)}</span>
+                          <CopyablePhone phone={t.receiver_phone} />
                         </span>
 
                         <span className="order-2 ml-auto shrink-0 text-right sm:order-none">
@@ -521,7 +592,16 @@ export default function HistoryPage() {
                       </div>
 
                       {failed && reason && (
-                        <div className="mt-1.5 pl-[18px] text-xs text-alert-deep">{reason}</div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleSearchChange(reason.startsWith("Error ") ? reason.slice(6) : reason)
+                          }
+                          title="Show transfers with this error"
+                          className="mt-1.5 ml-[18px] block max-w-full truncate text-left text-xs text-alert-deep underline decoration-dotted underline-offset-2 transition-colors hover:text-alert"
+                        >
+                          {reason}
+                        </button>
                       )}
                       {!failed && t.status !== "success" && (
                         <div className="mt-1.5 pl-[18px] font-mono text-eyebrow uppercase text-ink-faint">

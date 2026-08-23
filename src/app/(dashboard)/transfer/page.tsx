@@ -14,6 +14,7 @@ import { SimChip, SimChipSkeleton } from "@/components/SimCard";
 import { Stepper } from "@/components/Stepper";
 import { Receipt, ReceiptRow, ReceiptDivider } from "@/components/Receipt";
 import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { fetchSims, invalidateCache } from "@/lib/api";
 import { useNowSec } from "@/lib/useNowSec";
 import { useSessionState } from "@/lib/useSessionState";
@@ -24,6 +25,42 @@ import type { Sim } from "@/lib/types";
 const QUICK = [500, 800, 1000, 5000];
 const RESEND_COOLDOWN = 60;
 const STEPS = ["Sender", "OTP", "Confirm"];
+
+/**
+ * How much of a SIM's MyShare allowance is used. `used` includes the amount
+ * currently typed (limits count the transfer amount; the 5% fee is on top),
+ * so the bar previews the impact before anything is sent.
+ */
+function LimitBar({ label, used, cap }: { label: string; used: number; cap: number }) {
+  const pct = Math.min(100, Math.round((Math.max(0, used) / cap) * 100));
+  // Amber from 60%, red at 80%+ — the bar warns before the API rejects.
+  const warn = pct >= 60;
+  const danger = pct >= 80;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between font-mono text-eyebrow uppercase">
+        <span className="text-ink-mute">{label}</span>
+        <span className={cn("tnum", danger ? "text-alert-deep" : warn ? "text-brass-deep" : "text-ink-faint")}>
+          {fmtKs(Math.max(0, cap - Math.round(used)))} left
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-hairline">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-500 ease-out",
+            danger ? "bg-alert" : warn ? "bg-brass" : "bg-signal"
+          )}
+          style={{ width: `${pct}%` }}
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={cap}
+          aria-valuenow={Math.round(Math.max(0, used))}
+        />
+      </div>
+    </div>
+  );
+}
 
 interface Snapshot {
   sender: string;
@@ -423,6 +460,20 @@ export default function TransferPage() {
               </Button>
             ))}
           </div>
+          {selected && (
+            <div className="mt-3 space-y-2.5">
+              <LimitBar
+                label={`Daily · ${fmtPhoneGrouped(selected.phone)}`}
+                used={selected.volume_today + (amountValid ? amt : 0)}
+                cap={DAILY_VOLUME_LIMIT}
+              />
+              <LimitBar
+                label="Monthly"
+                used={selected.volume_this_month + (amountValid ? amt : 0)}
+                cap={MONTHLY_VOLUME_LIMIT}
+              />
+            </div>
+          )}
         </div>
       </section>
 

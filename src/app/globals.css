@@ -105,6 +105,31 @@
   scrollbar-color: rgb(var(--hairline-strong)) transparent;
 }
 
+/* Smooth theme crossfade. Armed only while switching (html.theme-anim is added
+   by the toggle for ~400ms) so everyday hover/focus transitions keep their own
+   snappy timings instead of inheriting a slow global color fade. */
+html.theme-anim,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition:
+    background-color 300ms ease,
+    border-color 300ms ease,
+    color 220ms ease,
+    fill 300ms ease,
+    stroke 300ms ease !important;
+  transition-delay: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-anim,
+  html.theme-anim *,
+  html.theme-anim *::before,
+  html.theme-anim *::after {
+    transition-duration: 1ms !important;
+  }
+}
+
 *::-webkit-scrollbar {
   width: 10px;
   height: 10px;

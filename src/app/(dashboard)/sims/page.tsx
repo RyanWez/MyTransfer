@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Cpu, Plus, Search, SquareStack, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +19,7 @@ import {
 import { SimCard, SimCardSkeleton } from "@/components/SimCard";
 import { fmtKs, fmtPhoneGrouped, sameNumber } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
+import { useLive } from "@/lib/liveEvents";
 import { useSessionState } from "@/lib/useSessionState";
 import { useNowSec } from "@/lib/useNowSec";
 import type { Sim } from "@/lib/types";
@@ -54,6 +55,8 @@ export default function SimsPage() {
 
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
   const [pendingBulkRemove, setPendingBulkRemove] = useState(false);
+  // Focused when the login dialog opens, so a number can be typed immediately.
+  const phoneInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(
     (background = false) => {
@@ -71,39 +74,13 @@ export default function SimsPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    let retries = 0;
-    let es: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function connect() {
-      es = new EventSource("/api/events");
-      es.onmessage = (e) => {
-        if (e.data === "update") {
-          invalidateCache("sims");
-          fetchSims({ bypassCache: true, noDelay: true })
-            .then((all) => setSims(all))
-            .catch(() => {});
-        }
-      };
-      es.onerror = () => {
-        es?.close();
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        const delay = Math.min(1000 * 2 ** retries++, 30000);
-        reconnectTimer = setTimeout(connect, delay);
-      };
-      es.onopen = () => {
-        retries = 0;
-      };
-    }
-
-    connect();
-
-    return () => {
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      es?.close();
-    };
-  }, []);
+  // Shared app-wide EventSource: refetch on pushes, reconnect with backoff.
+  useLive(() => {
+    invalidateCache("sims");
+    fetchSims({ bypassCache: true, noDelay: true })
+      .then((all) => setSims(all))
+      .catch(() => {});
+  });
 
   const filteredSims = useMemo(() => {
     if (!searchQuery.trim()) return sims;
@@ -433,7 +410,14 @@ export default function SimsPage() {
 
       {/* Login */}
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
-        <DialogContent>
+        {/* Land straight in the phone field: the whole point of the dialog is
+            typing a number, so don't let Radix park focus on the close X. */}
+        <DialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            phoneInputRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Log in a SIM</DialogTitle>
             <DialogDescription>
@@ -443,10 +427,14 @@ export default function SimsPage() {
           </DialogHeader>
 
           <div className="space-y-5 mt-2">
+            {/* While an SMS code is pending, switching to the password tab would
+                abandon that code — lock the switch until Cancel/Resend resolves it. */}
             <SegmentedControl
               aria-label="Login method"
               value={mode}
+              disabled={otpSent}
               onValueChange={(v) => {
+                if (otpSent) return;
                 setMode(v);
                 setOtpSent(false);
                 setFlow("login");
@@ -465,6 +453,7 @@ export default function SimsPage() {
 
             <div className="space-y-4">
               <Input
+                ref={phoneInputRef}
                 label="Phone number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}

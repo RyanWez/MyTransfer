@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Gauge, Send, SquareStack, ScrollText, X, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusDot } from "@/components/ui/StatusDot";
+import { useLiveStatus, type LiveStatus } from "@/lib/liveEvents";
 import type { Stats } from "@/lib/types";
 
 import { fetchStats } from "@/lib/api";
@@ -18,6 +19,13 @@ const items = [
   { href: "/history", label: "History", icon: ScrollText },
 ];
 
+/** How the shared SSE channel reads as an LED. */
+const liveLed: Record<LiveStatus, { tone: "signal" | "alert" | "muted"; pulse?: boolean; title: string }> = {
+  online: { tone: "signal", title: "Live — connected" },
+  connecting: { tone: "muted", title: "Connecting to live updates…" },
+  offline: { tone: "alert", pulse: true, title: "Live updates lost — reconnecting…" },
+};
+
 export interface SidebarProps {
   open: boolean;
   onClose: () => void;
@@ -28,6 +36,8 @@ export interface SidebarProps {
 export default function Sidebar({ open, onClose, collapsed = false, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname();
   const [fleet, setFleet] = React.useState<{ total: number; active: number } | null>(null);
+  const liveStatus = useLiveStatus();
+  const led = liveLed[liveStatus];
 
   // Uses deduplicated cached fetchStats so route navigation shares in-flight requests with Dashboard
   React.useEffect(() => {
@@ -131,8 +141,14 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
         </nav>
 
         <div className={cn("border-t border-white/10 py-4 transition-all duration-300", collapsed ? "px-2" : "px-5")}>
-          <div className={cn("flex items-center font-mono text-[10px] tracking-wider uppercase text-white/60", collapsed ? "justify-center" : "gap-2")}>
-            <StatusDot tone={fleet?.active ? "signal" : "muted"} size="sm" />
+          <div
+            className={cn(
+              "flex items-center font-mono text-[10px] tracking-wider uppercase text-white/60",
+              collapsed ? "justify-center" : "gap-2"
+            )}
+            title={led.title}
+          >
+            <StatusDot tone={led.tone} size="sm" pulse={led.pulse} />
             {!collapsed && (
               fleet ? (
                 <span className="tnum truncate text-white/70">

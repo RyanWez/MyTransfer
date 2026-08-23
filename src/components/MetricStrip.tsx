@@ -3,12 +3,19 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import type { Tone } from "@/lib/format";
+import { CountUp } from "@/components/CountUp";
 
 export interface Metric {
   label: string;
-  value: string;
+  /**
+   * A string renders as-is; a number counts up to its target (and re-animates
+   * between updates) using `format`.
+   */
+  value: string | number;
   sub?: string;
   tone?: Tone;
+  /** Formatter for numeric values; defaults to en-US grouping. */
+  format?: (n: number) => string;
 }
 
 const valueTone: Record<Tone, string> = {
@@ -25,6 +32,39 @@ const columns: Record<number, string> = {
   3: "grid-cols-1 sm:grid-cols-3",
   4: "grid-cols-2 md:grid-cols-4",
 };
+
+/**
+ * A light scale-punch when a numeric metric changes — keyed off the *target*
+ * value so the running count-up doesn't retrigger it every frame.
+ */
+function PunchOnChange({
+  valueKey,
+  children,
+  className,
+}: {
+  valueKey: string | number;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [punching, setPunching] = React.useState(false);
+  const prev = React.useRef(valueKey);
+
+  React.useEffect(() => {
+    if (!Object.is(prev.current, valueKey)) {
+      prev.current = valueKey;
+      setPunching(true);
+    }
+  }, [valueKey]);
+
+  return (
+    <div
+      className={cn(className, punching && "animate-cell-punch")}
+      onAnimationEnd={() => setPunching(false)}
+    >
+      {children}
+    </div>
+  );
+}
 
 /**
  * Metrics as hairline-divided columns rather than boxed cards — one less border
@@ -45,14 +85,15 @@ function MetricStrip({ items, className }: { items: Metric[]; className?: string
           <div className="font-mono text-eyebrow font-semibold uppercase text-ink-mute">
             {m.label}
           </div>
-          <div
-            className={cn(
-              "mt-1.5 font-mono text-xl tnum",
-              valueTone[m.tone ?? "muted"]
-            )}
-          >
-            {m.value}
-          </div>
+          <PunchOnChange valueKey={m.value} className="mt-1.5 font-mono text-xl tnum">
+            <span className={valueTone[m.tone ?? "muted"]}>
+              {typeof m.value === "number" ? (
+                <CountUp value={m.value} format={m.format} duration={700} />
+              ) : (
+                m.value
+              )}
+            </span>
+          </PunchOnChange>
           {m.sub && <div className="mt-0.5 text-xs text-ink-faint">{m.sub}</div>}
         </div>
       ))}
