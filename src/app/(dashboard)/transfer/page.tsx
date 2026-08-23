@@ -267,7 +267,7 @@ export default function TransferPage() {
         </Panel>
 
         <div className="mt-5 flex gap-3">
-          <Button onClick={reset}>New transfer</Button>
+          <Button autoFocus onClick={reset}>New transfer</Button>
           <Button asChild variant="ghost">
             <Link href="/history">View history</Link>
           </Button>
@@ -387,6 +387,7 @@ export default function TransferPage() {
         </div>
         <div>
           <Input
+            id="amount-input"
             label="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
@@ -409,7 +410,10 @@ export default function TransferPage() {
                 variant="outline"
                 size="sm"
                 disabled={locked}
-                onClick={() => setAmount(String(q))}
+                onClick={() => {
+                  setAmount(String(q));
+                  document.getElementById("amount-input")?.focus();
+                }}
                 className="flex-1 font-mono tnum"
               >
                 {q.toLocaleString()}
