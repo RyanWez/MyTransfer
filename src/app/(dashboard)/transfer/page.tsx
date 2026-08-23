@@ -39,7 +39,7 @@ export default function TransferPage() {
   const [loaded, setLoaded] = useState(false);
   const [sender, setSender] = useSessionState("transfer_sender", "");
   const [receiver, setReceiver] = useSessionState("transfer_receiver", "");
-  const [amount, setAmount] = useSessionState("transfer_amount", "");
+  const [amount, setAmount] = useSessionState("transfer_amount", "5000");
   const [otp, setOtp] = useSessionState("transfer_otp", "");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -183,7 +183,7 @@ export default function TransferPage() {
         loadSims();
         setRecentContacts((prev) => {
           const filtered = prev.filter((p) => p !== receiver);
-          return [receiver, ...filtered].slice(0, 4);
+          return [receiver, ...filtered].slice(0, 3);
         });
       } else {
         failToast(r, "Transfer failed");
@@ -203,11 +203,12 @@ export default function TransferPage() {
   function reset() {
     setStage("form");
     setOtp("");
-    setAmount("");
+    setAmount("5000");
     setReceiver("");
     setReceipt(null);
     setResendAt(0);
     setSearchQuery("");
+    setTimeout(() => document.getElementById("to-input")?.focus(), 50);
   }
 
   if (loaded && activeSims.length === 0 && stage === "form") {
@@ -355,6 +356,7 @@ export default function TransferPage() {
       <section className="grid gap-5 sm:grid-cols-2">
         <div>
           <Input
+            id="to-input"
             label="To"
             value={receiver}
             onChange={(e) => setReceiver(e.target.value.replace(/[^\d+]/g, ""))}
@@ -372,7 +374,7 @@ export default function TransferPage() {
           />
           {recentContacts.length > 0 && !locked && (
             <div className="mt-2.5 flex flex-wrap gap-2">
-              {recentContacts.map((c) => (
+              {recentContacts.slice(0, 3).map((c) => (
                 <button
                   key={c}
                   type="button"
