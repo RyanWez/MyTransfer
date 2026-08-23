@@ -77,11 +77,17 @@ const config: Config = {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
         },
+        "shake-x": {
+          "0%, 100%": { transform: "translateX(0)" },
+          "10%, 30%, 50%, 70%, 90%": { transform: "translateX(-4px)" },
+          "20%, 40%, 60%, 80%": { transform: "translateX(4px)" },
+        },
       },
       animation: {
         "rise-in": "rise-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both",
         "cell-punch": "cell-punch 180ms ease-out",
         "led-pulse": "led-pulse 2.4s ease-in-out infinite",
+        "shake-x": "shake-x 400ms ease-in-out",
       },
     },
   },

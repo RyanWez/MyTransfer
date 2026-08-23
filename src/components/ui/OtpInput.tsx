@@ -10,6 +10,8 @@ export interface OtpInputProps {
   disabled?: boolean;
   autoFocus?: boolean;
   className?: string;
+  error?: boolean;
+  onSubmit?: () => void;
 }
 
 /**
@@ -23,9 +25,20 @@ function OtpInput({
   disabled,
   autoFocus,
   className,
+  error,
+  onSubmit,
 }: OtpInputProps) {
   const refs = React.useRef<(HTMLInputElement | null)[]>([]);
   const [punch, setPunch] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (value === "" && refs.current[0]) {
+      const isFocused = refs.current.some((el) => el === document.activeElement);
+      if (isFocused && document.activeElement !== refs.current[0]) {
+        refs.current[0].focus();
+      }
+    }
+  }, [value]);
 
   const digits = value.split("");
 
@@ -84,7 +97,14 @@ function OtpInput({
   };
 
   return (
-    <div className={cn("flex gap-2", className)} onPaste={handlePaste}>
+    <div
+      className={cn(
+        "flex gap-2",
+        error && "animate-shake-x",
+        className
+      )}
+      onPaste={handlePaste}
+    >
       {Array.from({ length }, (_, i) => {
         const filled = Boolean(digits[i]);
         return (
@@ -95,7 +115,14 @@ function OtpInput({
             }}
             value={digits[i] ?? ""}
             onChange={(e) => handleChange(i, e.target.value)}
-            onKeyDown={(e) => handleKeyDown(i, e)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && onSubmit) {
+                e.preventDefault();
+                onSubmit();
+              } else {
+                handleKeyDown(i, e);
+              }
+            }}
             onFocus={(e) => e.currentTarget.select()}
             disabled={disabled}
             autoFocus={autoFocus && i === 0}
@@ -106,7 +133,7 @@ function OtpInput({
               "h-16 w-full min-w-0 sm:h-14 rounded border bg-card text-center font-mono text-otp text-ink",
               "transition-colors duration-150 focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass",
               "disabled:bg-substrate disabled:text-ink-faint",
-              filled ? "border-brass" : "border-hairline hover:border-hairline-strong",
+              error ? "border-alert text-alert focus:border-alert focus:ring-alert" : filled ? "border-brass" : "border-hairline hover:border-hairline-strong",
               punch === i && "animate-cell-punch"
             )}
           />

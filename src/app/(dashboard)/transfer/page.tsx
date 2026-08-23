@@ -44,6 +44,7 @@ export default function TransferPage() {
 
   const [stage, setStage] = useSessionState<"form" | "otp" | "done">("transfer_stage", "form");
   const [busy, setBusy] = useState(false);
+  const [otpError, setOtpError] = useState(false);
   const [receipt, setReceipt] = useSessionState<Snapshot | null>("transfer_receipt", null);
   const [resendAt, setResendAt] = useSessionState("transfer_resendAt", 0);
 
@@ -180,6 +181,11 @@ export default function TransferPage() {
         loadSims();
       } else {
         failToast(r, "Transfer failed");
+        setOtpError(true);
+        setTimeout(() => {
+          setOtp("");
+          setOtpError(false);
+        }, 500);
       }
     } catch {
       toast.error("Network error", { description: "The console couldn't reach Mytel. Try again." });
@@ -417,7 +423,7 @@ export default function TransferPage() {
             )}
           </p>
           <div className="mt-3.5">
-            <OtpInput value={otp} onChange={setOtp} autoFocus />
+            <OtpInput value={otp} onChange={(v) => { setOtp(v); setOtpError(false); }} autoFocus error={otpError} onSubmit={otp.length === 6 && !busy ? confirmTransfer : undefined} />
           </div>
         </section>
       )}

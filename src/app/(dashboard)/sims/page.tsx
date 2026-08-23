@@ -39,6 +39,7 @@ export default function SimsPage() {
   const [otp, setOtp] = useSessionState("login_otp", "");
   const [password, setPassword] = useSessionState("login_password", "");
   const [otpSent, setOtpSent] = useSessionState("login_otpSent", false);
+  const [otpError, setOtpError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [flow, setFlow] = useSessionState<Flow>("login_flow", "login");
   // Only set on the register flow; v2/register/confirm needs it alongside the code.
@@ -114,6 +115,7 @@ export default function SimsPage() {
   function openLogin(prefill?: string) {
     setPhone(prefill ?? "");
     setOtp("");
+    setOtpError(false);
     setPassword("");
     setOtpSent(false);
     setMode("otp");
@@ -195,6 +197,15 @@ export default function SimsPage() {
         const msg = r.message || r.error || "Check the code or password and try again.";
         const isNewCode =
           r.errorCode === 401 || String(msg).toLowerCase().includes("new code");
+        
+        if (mode === "otp") {
+          setOtpError(true);
+          setTimeout(() => {
+            setOtp("");
+            setOtpError(false);
+          }, 500);
+        }
+
         if (flow !== "register" && isNewCode) {
           toast.error("Login failed - Mytel sent a new code, please wait for second SMS", {
             description: msg,
@@ -432,9 +443,11 @@ export default function SimsPage() {
                         <span>Code from SMS</span>
                         {cooldown > 0 && <span className="text-ink-faint">resend in {cooldown}s</span>}
                       </div>
+
                       <div className="mt-1">
-                        <OtpInput value={otp} onChange={setOtp} autoFocus />
+                        <OtpInput value={otp} onChange={(v) => { setOtp(v); setOtpError(false); }} autoFocus error={otpError} onSubmit={canSubmit && !busy ? doLogin : undefined} />
                       </div>
+
                       {flow === "register" && (
                         <p className="mt-3 text-xs leading-relaxed text-ink-mute">
                           This number has no MyID account. Entering the code opens one and logs it
