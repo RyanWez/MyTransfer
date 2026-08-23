@@ -59,6 +59,12 @@ flyctl ssh sftp get /app/data/backups/dashboard-<timestamp>.db ./dashboard-backu
 
 `scripts/backup-db.js` keeps the 7 newest backups in `/app/data/backups`.
 
+```bash
+fly sftp get /app/data/dashboard.db data/dashboard.db
+fly sftp get /app/data/dashboard.db-wal data/dashboard.db-wal
+fly sftp get /app/data/dashboard.db-shm data/dashboard.db-shm
+```
+
 ### Auth
 
 - Every page and API route is gated by `src/middleware.ts`; only `/login`
