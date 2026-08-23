@@ -422,6 +422,11 @@ export default function SimsPage() {
                 label="Phone number"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/[^\d+]/g, ""))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && mode === "otp" && !otpSent && phone && !busy) {
+                    requestOtp();
+                  }
+                }}
                 disabled={mode === "otp" && otpSent}
                 placeholder="09XXXXXXXXX"
                 inputMode="numeric"
@@ -463,6 +468,11 @@ export default function SimsPage() {
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && phone && canSubmit && !busy) {
+                            doLogin();
+                          }
+                        }}
                         autoComplete="current-password"
                       />
                     </div>

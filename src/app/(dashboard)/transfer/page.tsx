@@ -17,6 +17,7 @@ import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
 import { fetchSims, invalidateCache } from "@/lib/api";
 import { useNowSec } from "@/lib/useNowSec";
 import { useSessionState } from "@/lib/useSessionState";
+import { useLocalState } from "@/lib/useLocalState";
 import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import type { Sim } from "@/lib/types";
 
@@ -46,6 +47,7 @@ export default function TransferPage() {
   const [busy, setBusy] = useState(false);
   const [otpError, setOtpError] = useState(false);
   const [receipt, setReceipt] = useSessionState<Snapshot | null>("transfer_receipt", null);
+  const [recentContacts, setRecentContacts] = useLocalState<string[]>("recent_contacts", []);
   const [resendAt, setResendAt] = useSessionState("transfer_resendAt", 0);
 
   const nowSec = useNowSec();
@@ -179,6 +181,10 @@ export default function TransferPage() {
         });
         invalidateCache();
         loadSims();
+        setRecentContacts((prev) => {
+          const filtered = prev.filter((p) => p !== receiver);
+          return [receiver, ...filtered].slice(0, 4);
+        });
       } else {
         failToast(r, "Transfer failed");
         setOtpError(true);
@@ -347,22 +353,48 @@ export default function TransferPage() {
 
       {/* Receiver + amount */}
       <section className="grid gap-5 sm:grid-cols-2">
-        <Input
-          label="To"
-          value={receiver}
-          onChange={(e) => setReceiver(e.target.value.replace(/[^\d+]/g, ""))}
-          disabled={locked}
-          placeholder="09XXXXXXXXX"
-          inputMode="numeric"
-          autoComplete="off"
-          className="font-mono"
-          helperText="Any Mytel number, including one not in the tray."
-        />
+        <div>
+          <Input
+            label="To"
+            value={receiver}
+            onChange={(e) => setReceiver(e.target.value.replace(/[^\d+]/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && sender && receiverValid && amountValid && !busy) {
+                sendOtp();
+              }
+            }}
+            disabled={locked}
+            placeholder="09XXXXXXXXX"
+            inputMode="numeric"
+            autoComplete="off"
+            className="font-mono"
+            helperText="Any Mytel number, including one not in the tray."
+          />
+          {recentContacts.length > 0 && !locked && (
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {recentContacts.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setReceiver(c)}
+                  className="rounded bg-substrate px-2.5 py-1 font-mono text-xs text-ink-mute transition-colors hover:bg-hairline hover:text-ink"
+                >
+                  {fmtPhoneGrouped(c)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div>
           <Input
             label="Amount"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && sender && receiverValid && amountValid && !busy) {
+                sendOtp();
+              }
+            }}
             disabled={locked}
             placeholder="500 – 5,000"
             inputMode="numeric"
