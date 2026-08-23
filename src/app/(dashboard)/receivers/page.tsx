@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { StatusDot } from "@/components/ui/StatusDot";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
-import { fmtAmount, fmtClock, fmtPhoneGrouped, statusBadge } from "@/lib/format";
+import { fmtAmount, fmtClock, fmtPhoneGrouped } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fetchHistory } from "@/lib/api";
 import type { Transfer } from "@/lib/types";
@@ -44,6 +44,27 @@ function ReceiversSkeleton() {
   );
 }
 
+const PAGE_SIZE = 50;
+
+/** Viewport caps: the outer list scrolls after ~10 receiver rows, an expanded
+ *  receiver's transfer list scrolls after ~5 rows — a phone with dozens of
+ *  transfers can't stretch the page anymore. */
+const LIST_VIEWPORT = "max-h-[600px]";
+const TRANSFERS_VIEWPORT = "max-h-[350px]";
+
+function getPaginationRange(current: number, total: number): (number | "...")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+  if (current >= total - 3) {
+    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
 type GroupedReceiver = {
   phone: string;
   totalAmount: number;
@@ -58,6 +79,7 @@ export default function ReceiversPage() {
   const [loading, setLoading] = useState(true);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let alive = true;
@@ -84,6 +106,8 @@ export default function ReceiversPage() {
     const normalizedQuery = searchQuery.replace(/\D/g, "");
     
     for (const t of transfers) {
+      // Success only — failed/pending attempts never reach the receivers log.
+      if (t.status !== "success") continue;
       if (normalizedQuery && !t.receiver_phone.includes(normalizedQuery)) {
         continue;
       }
@@ -101,16 +125,32 @@ export default function ReceiversPage() {
       }
       
       g.transfers.push(t);
-      if (t.status === "success") {
-        g.totalAmount += t.amount;
-        g.totalFee += t.fee || 0;
-        g.successCount++;
-      }
+      g.totalAmount += t.amount;
+      g.totalFee += t.fee || 0;
+      g.successCount++;
     }
 
     // Sort by most recent transfer first (or could be totalAmount, but this mirrors history better)
     return Array.from(map.values()).sort((a, b) => b.totalAmount - a.totalAmount);
   }, [transfers, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(grouped.length / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+
+  const pageRows = useMemo(
+    () => grouped.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [grouped, currentPage]
+  );
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value);
+    setPage(1);
+  }
+
+  function handleRangeChange(range: DateRange) {
+    setRange(range);
+    setPage(1);
+  }
 
   if (loading) {
     return <ReceiversSkeleton />;
@@ -129,11 +169,11 @@ export default function ReceiversPage() {
               type="text"
               placeholder="Search receiver..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="h-8 w-full sm:w-60 rounded border border-hairline bg-card pl-8 pr-3 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
             />
           </div>
-          <DateRangePicker value={range} onChange={setRange} />
+          <DateRangePicker value={range} onChange={handleRangeChange} />
         </div>
       </div>
 
@@ -143,96 +183,177 @@ export default function ReceiversPage() {
           title="No receivers found"
           body={
             searchQuery
-              ? `No transfers matching "${searchQuery}" in this period.`
-              : "No transfers recorded in this period."
+              ? `No successful transfers matching "${searchQuery}" in this period.`
+              : "No successful transfers recorded in this period."
           }
         />
       ) : (
-        <div className="overflow-hidden rounded border border-hairline bg-card shadow-sm">
-          <ul className="divide-y divide-hairline flex flex-col">
-            {grouped.map((g) => {
-              const isExpanded = expandedId === g.phone;
-              return (
-                <li key={g.phone} className="flex flex-col">
-                  <button
-                    onClick={() => setExpandedId(isExpanded ? null : g.phone)}
-                    className={cn(
-                      "flex items-center justify-between p-4 text-left transition-colors hover:bg-white/[0.02]",
-                      isExpanded && "bg-white/[0.02]"
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <ChevronDown
+        <div className="space-y-4">
+          <div className="overflow-hidden rounded border border-hairline bg-card shadow-sm">
+            <div className={cn(LIST_VIEWPORT, "overflow-y-auto overscroll-contain")}>
+              <ul className="divide-y divide-hairline flex flex-col">
+                {pageRows.map((g) => {
+                  const isExpanded = expandedId === g.phone;
+                  return (
+                    <li key={g.phone} className="flex flex-col">
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : g.phone)}
                         className={cn(
-                          "h-4 w-4 text-ink-faint transition-transform duration-300",
-                          isExpanded ? "-rotate-180" : "rotate-0"
+                          "flex items-center justify-between p-4 text-left transition-colors hover:bg-white/[0.02]",
+                          isExpanded && "bg-white/[0.02]"
                         )}
-                      />
-                      <span className="font-mono text-[15px] font-medium text-ink">
-                        {fmtPhoneGrouped(g.phone)}
-                      </span>
-                      {g.successCount > 0 && (
-                        <span className="rounded-full bg-substrate px-2 py-0.5 font-mono text-[10px] text-ink-mute">
-                          {g.successCount} {g.successCount === 1 ? "transfer" : "transfers"}
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-mono text-base font-medium text-brass-deep tnum">
-                      {fmtAmount(g.totalAmount)} <span className="text-xs text-brass-deep/60">Ks</span>
-                    </div>
-                  </button>
+                      >
+                        <div className="flex items-center gap-3">
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 text-ink-faint transition-transform duration-300",
+                              isExpanded ? "-rotate-180" : "rotate-0"
+                            )}
+                          />
+                          <span className="font-mono text-[15px] font-medium text-ink">
+                            {fmtPhoneGrouped(g.phone)}
+                          </span>
+                          <span className="rounded-full bg-substrate px-2 py-0.5 font-mono text-[10px] text-ink-mute">
+                            {g.successCount} {g.successCount === 1 ? "transfer" : "transfers"}
+                          </span>
+                        </div>
+                        <div className="font-mono text-base font-medium text-brass-deep tnum">
+                          {fmtAmount(g.totalAmount)} <span className="text-xs text-brass-deep/60">Ks</span>
+                        </div>
+                      </button>
 
-                  {/* Smooth accordion body */}
-                  <div
-                    className={cn(
-                      "grid transition-all duration-300 ease-in-out",
-                      isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                    )}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="border-t border-hairline bg-substrate/50 p-4">
-                        <ul className="space-y-3">
-                          {g.transfers.map((t) => (
-                            <li
-                              key={t.id}
-                              className="flex items-center justify-between gap-4 rounded-md border border-hairline bg-card p-3 shadow-sm"
+                      {/* Smooth accordion body */}
+                      <div
+                        className={cn(
+                          "grid transition-all duration-300 ease-in-out",
+                          isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                        )}
+                      >
+                        <div className="overflow-hidden">
+                          <div className="border-t border-hairline bg-substrate/50 p-4">
+                            <div
+                              className={cn(
+                                TRANSFERS_VIEWPORT,
+                                "overflow-y-auto overscroll-contain",
+                                g.transfers.length > 5 && "pr-1"
+                              )}
                             >
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1.5 min-w-[80px]">
-                                  <StatusDot tone={statusBadge(t.status).tone} size="sm" />
-                                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
-                                    {statusBadge(t.status).label}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className="font-mono text-[13px] text-ink">
-                                    From: {fmtPhoneGrouped(t.sender_phone)}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-ink-mute">
-                                    {fmtClock(t.created_at)}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end">
-                                <span className="font-mono text-[13px] font-medium text-ink tnum">
-                                  {fmtAmount(t.amount)} <span className="text-[10px] text-ink-mute">Ks</span>
-                                </span>
-                                {t.fee > 0 && (
-                                  <span className="font-mono text-[10px] text-ink-mute">
-                                    Fee: {fmtAmount(t.fee)} Ks
-                                  </span>
-                                )}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                              <ul className="space-y-3">
+                                {g.transfers.map((t) => (
+                                  <li
+                                    key={t.id}
+                                    className="flex items-center justify-between gap-4 rounded-md border border-hairline bg-card p-3 shadow-sm"
+                                  >
+                                    <div className="flex flex-col">
+                                      <span className="font-mono text-[13px] text-ink">
+                                        From: {fmtPhoneGrouped(t.sender_phone)}
+                                      </span>
+                                      <span className="font-mono text-[10px] text-ink-mute">
+                                        {fmtClock(t.created_at)}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-mono text-[13px] font-medium text-ink tnum">
+                                        {fmtAmount(t.amount)}{" "}
+                                        <span className="text-[10px] text-ink-mute">Ks</span>
+                                      </span>
+                                      {t.fee > 0 && (
+                                        <span className="font-mono text-[10px] text-ink-mute">
+                                          Fee: {fmtAmount(t.fee)} Ks
+                                        </span>
+                                      )}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </div>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={grouped.length}
+            onPageChange={setPage}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Pagination({
+  currentPage,
+  totalPages,
+  totalItems,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-4 sm:flex-row">
+      <p className="font-mono text-eyebrow uppercase tnum text-ink-mute">
+        Showing {(currentPage - 1) * PAGE_SIZE + 1}–
+        {Math.min(currentPage * PAGE_SIZE, totalItems)} of {totalItems} receivers
+      </p>
+
+      {totalPages > 1 && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            disabled={currentPage <= 1}
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+            aria-label="Previous page"
+            title="Previous page"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          <div className="flex items-center gap-1">
+            {getPaginationRange(currentPage, totalPages).map((p, idx) =>
+              p === "..." ? (
+                <span key={`ellipsis-${idx}`} className="px-1.5 font-mono text-xs text-ink-faint">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={`page-${p}`}
+                  type="button"
+                  onClick={() => onPageChange(p)}
+                  className={cn(
+                    "h-8 min-w-[2rem] rounded px-2 font-mono text-xs font-medium transition-colors",
+                    currentPage === p
+                      ? "bg-ink text-substrate shadow-sm"
+                      : "border border-hairline bg-card text-ink hover:border-hairline-strong hover:bg-substrate"
+                  )}
+                >
+                  {p}
+                </button>
+              )
+            )}
+          </div>
+
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            disabled={currentPage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+            aria-label="Next page"
+            title="Next page"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
     </div>
