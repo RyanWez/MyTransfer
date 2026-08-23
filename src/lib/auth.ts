@@ -76,9 +76,10 @@ export async function verifyPassword(candidate: string): Promise<boolean> {
 
 function secret(): string | null {
   const s = process.env.AUTH_SECRET;
-  if (s) return s;
+  const totpSuffix = process.env.AUTH_TOTP_SECRET || "";
+  if (s) return s + totpSuffix;
   // Dev convenience only — production refuses to mint cookies without a secret.
-  if (!isProduction()) return "dev-insecure-secret";
+  if (!isProduction()) return "dev-insecure-secret" + totpSuffix;
   return null;
 }
 

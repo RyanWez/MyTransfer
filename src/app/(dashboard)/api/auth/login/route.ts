@@ -8,9 +8,12 @@ import {
   missingPasswordInProduction,
 } from "@/lib/auth";
 
+import { authenticator } from "otplib";
+
 /** Lets the login page skip itself when the gate isn't armed (dev without a password). */
 export async function GET() {
-  return NextResponse.json({ ok: true, required: authRequired() });
+  const totpRequired = !!process.env.AUTH_TOTP_SECRET;
+  return NextResponse.json({ ok: true, required: authRequired(), totpRequired });
 }
 
 export async function POST(req: NextRequest) {
@@ -24,15 +27,24 @@ export async function POST(req: NextRequest) {
   }
 
   let password = "";
+  let totpCode = "";
   try {
     const body = await req.json();
     password = typeof body?.password === "string" ? body.password : "";
+    totpCode = typeof body?.totpCode === "string" ? body.totpCode : "";
   } catch {
     return NextResponse.json({ ok: false, error: "bad request" }, { status: 400 });
   }
 
   if (!password || !(await verifyPassword(password))) {
     return NextResponse.json({ ok: false, error: "wrong password" }, { status: 401 });
+  }
+
+  const totpSecret = process.env.AUTH_TOTP_SECRET;
+  if (totpSecret) {
+    if (!totpCode || !authenticator.check(totpCode, totpSecret)) {
+      return NextResponse.json({ ok: false, error: "wrong auth code" }, { status: 401 });
+    }
   }
 
   const value = await createSessionValue();

@@ -26,6 +26,8 @@ function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [password, setPassword] = React.useState("");
+  const [totpCode, setTotpCode] = React.useState("");
+  const [totpRequired, setTotpRequired] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [locked, setLocked] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -42,6 +44,7 @@ function LoginForm() {
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
+        if (d?.totpRequired) setTotpRequired(true);
         if (d?.ok && d.required === false) {
           const next = params.get("next");
           router.replace(next && next.startsWith("/") ? next : "/");
@@ -62,7 +65,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, totpCode }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
@@ -77,9 +80,13 @@ function LoginForm() {
         setLocked(true);
         setError(String(data?.error ?? "Server is not configured for login"));
       } else {
-        setError(String(data?.error ?? "Wrong password"));
-        setPassword("");
-        inputRef.current?.focus();
+        setError(String(data?.error ?? (totpRequired && data?.error?.includes('auth code') ? "Wrong auth code" : "Wrong password")));
+        if (data?.error?.includes('auth code')) {
+          setTotpCode("");
+        } else {
+          setPassword("");
+          inputRef.current?.focus();
+        }
       }
     } catch {
       setError("Network error — try again");
@@ -123,11 +130,26 @@ function LoginForm() {
             iconLeft={<Lock className="h-4 w-4" strokeWidth={1.75} />}
             placeholder="••••••••"
           />
+          {totpRequired && (
+            <div className="mt-4">
+              <Input
+                label="Google Auth Code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                disabled={locked}
+                placeholder="123456"
+                className="font-mono tracking-widest text-center"
+              />
+            </div>
+          )}
           <Button
             type="submit"
             className="mt-4 w-full"
             loading={busy}
-            disabled={locked || !password}
+            disabled={locked || !password || (totpRequired && totpCode.length !== 6)}
           >
             {busy ? "Checking…" : "Unlock"}
           </Button>

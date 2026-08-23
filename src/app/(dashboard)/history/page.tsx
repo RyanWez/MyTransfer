@@ -305,7 +305,7 @@ export default function HistoryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           id: deleteId,
-          ...(isHighValue ? { password: confirmPassword } : {})
+          ...(isHighValue ? { password: confirmPassword, totpCode: confirmPassword } : {})
         }),
       }).then((r) => r.json());
       if (res.ok) {
@@ -662,7 +662,7 @@ export default function HistoryPage() {
                       </div>
                       <div className="space-y-2">
                         <label className="text-sm font-medium text-ink">
-                          To confirm, type AUTH_PASSWORD
+                          To confirm, type Google Auth Code or Operator Password
                         </label>
                         <input 
                           type="password"
