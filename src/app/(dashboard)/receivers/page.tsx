@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronDown, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
-import { fmtAmount, fmtClock, fmtPhoneGrouped } from "@/lib/format";
+import { fmtAmount, fmtClock, fmtPhone, fmtPhoneGrouped } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fetchHistory } from "@/lib/api";
+import { toast } from "sonner";
 import type { Transfer } from "@/lib/types";
 
 function getInitialTodayRange(): DateRange {
@@ -72,6 +73,16 @@ type GroupedReceiver = {
   successCount: number;
   transfers: Transfer[];
 };
+
+/** Copies a paste-ready local number (09...) — grouped display stays for reading. */
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`${text} copied`);
+  } catch {
+    toast.error("Couldn't copy to clipboard");
+  }
+}
 
 export default function ReceiversPage() {
   const [range, setRange] = useState<DateRange>(getInitialTodayRange);
@@ -210,8 +221,25 @@ export default function ReceiversPage() {
                               isExpanded ? "-rotate-180" : "rotate-0"
                             )}
                           />
-                          <span className="font-mono text-[15px] font-medium text-ink">
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            title="Click to copy"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyToClipboard(fmtPhone(g.phone));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                copyToClipboard(fmtPhone(g.phone));
+                              }
+                            }}
+                            className="group/copy inline-flex cursor-copy items-center gap-1 rounded font-mono text-[15px] font-medium text-ink transition-colors hover:text-brass focus:outline-none focus-visible:ring-1 focus-visible:ring-brass"
+                          >
                             {fmtPhoneGrouped(g.phone)}
+                            <Copy className="h-3 w-3 text-ink-faint opacity-0 transition-opacity group-hover/copy:opacity-100" />
                           </span>
                           <span className="rounded-full bg-substrate px-2 py-0.5 font-mono text-[10px] text-ink-mute">
                             {g.successCount} {g.successCount === 1 ? "transfer" : "transfers"}
