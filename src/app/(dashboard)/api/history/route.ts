@@ -17,6 +17,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     transfers: dbApi.listTransfers(limit, validFrom, validTo),
+    // Count of every transfer in the range, LIMIT excluded — the client uses
+    // this to warn when its view was trimmed to the latest `limit` rows.
+    total: dbApi.countTransfers(validFrom, validTo),
   });
 }
 

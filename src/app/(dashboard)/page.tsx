@@ -29,6 +29,61 @@ import type { StatsResponse } from "@/lib/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
+/**
+ * First-paint placeholder mirroring the page's real layout, so the dashboard
+ * never greets the operator with blank "—" slots. Only used before the very
+ * first fetch lands — refetches hold the previous render instead (deliberate
+ * stale-while-revalidate, no flicker on every SSE push).
+ */
+function DashboardSkeleton() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-8 animate-pulse" aria-busy="true" aria-label="Loading dashboard">
+      {/* Hero figure */}
+      <div className="space-y-3">
+        <div className="h-2.5 w-24 rounded bg-substrate" />
+        <div className="h-11 w-72 max-w-full rounded bg-substrate" />
+        <div className="h-3 w-52 rounded bg-substrate" />
+      </div>
+
+      <div className="space-y-4">
+        {/* Range presets */}
+        <div className="h-10 w-full max-w-md rounded border border-hairline bg-card" />
+
+        {/* Metric strip */}
+        <div className="grid gap-px overflow-hidden rounded border border-hairline bg-hairline sm:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="space-y-2 bg-card px-4 py-3.5">
+              <div className="h-2.5 w-20 rounded bg-substrate" />
+              <div className="h-5 w-28 rounded bg-substrate" />
+              <div className="h-2.5 w-24 rounded bg-substrate" />
+            </div>
+          ))}
+        </div>
+
+        {/* Two chart cards */}
+        {[1, 2].map((i) => (
+          <div key={i} className="rounded border border-hairline bg-card px-4 py-4">
+            <div className="mb-4 h-2.5 w-28 rounded bg-substrate" />
+            <div className="h-40 rounded bg-substrate/70" />
+          </div>
+        ))}
+      </div>
+
+      {/* Recent list */}
+      <div className="divide-y divide-hairline overflow-hidden rounded border border-hairline bg-card">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3.5">
+            <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-substrate" />
+            <div className="h-3 w-10 shrink-0 rounded bg-substrate" />
+            <div className="h-3 w-48 max-w-[60%] flex-1 rounded bg-substrate" />
+            <div className="ml-auto h-3.5 w-16 shrink-0 rounded bg-substrate" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [preset, setPreset] = useState<RangeKey>("today");
   const [range, setRange] = useState(() => presetRange("today"));
@@ -143,6 +198,11 @@ export default function DashboardPage() {
       ? "today"
       : `${fmtShortDate(range.from)} – ${fmtShortDate(range.to - 1)}`;
   const grain = hourly ? "Hour by hour" : "Day by day";
+
+  // Very first visit: show the layout taking shape rather than "—" placeholders.
+  if (!loaded && !data) {
+    return <DashboardSkeleton />;
+  }
 
   if (loaded && stats && stats.simCount === 0) {
     return (

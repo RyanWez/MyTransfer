@@ -89,18 +89,18 @@ export async function fetchHistory(
   to?: number,
   limit?: number,
   opts?: { bypassCache?: boolean; noDelay?: boolean }
-): Promise<Transfer[]> {
+): Promise<{ transfers: Transfer[]; total: number }> {
   const params = new URLSearchParams();
   if (from !== undefined) params.set("from", String(from));
   if (to !== undefined) params.set("to", String(to));
   if (limit !== undefined) params.set("limit", String(limit));
   const query = params.toString() ? `?${params.toString()}` : "";
   const key = `history:${from ?? "all"}:${to ?? "all"}:${limit ?? "def"}`;
-  const data = await cachedFetch<{ ok: boolean; transfers: Transfer[] }>(
+  const data = await cachedFetch<{ ok: boolean; transfers: Transfer[]; total: number }>(
     key,
     `/api/history${query}`,
     2500,
     opts
   );
-  return data.transfers ?? [];
+  return { transfers: data.transfers ?? [], total: data.total ?? 0 };
 }

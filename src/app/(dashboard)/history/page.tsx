@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusDot } from "@/components/ui/StatusDot";
@@ -238,6 +238,9 @@ function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDel
 
 export default function HistoryPage() {
   const [rows, setRows] = useState<Transfer[]>([]);
+  // Every transfer in the selected range, LIMIT excluded — when this exceeds
+  // rows.length the view was trimmed to the latest rows and must say so.
+  const [total, setTotal] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange>(getInitialTodayRange);
   const [filter, setFilter] = useState<Filter>("all");
@@ -259,7 +262,10 @@ export default function HistoryPage() {
     const opts = background ? { bypassCache: true, noDelay: true } : undefined;
     const r = background ? dateRangeRef.current : dateRange;
     fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, opts)
-      .then((transfers) => setRows(transfers))
+      .then(({ transfers, total }) => {
+        setRows(transfers);
+        setTotal(total);
+      })
       .catch(() => {})
       .finally(() => setLoaded(true));
   }, [dateRange]);
@@ -273,7 +279,10 @@ export default function HistoryPage() {
     invalidateCache("history");
     const r = dateRangeRef.current;
     fetchHistory(r.from ?? undefined, r.to ?? undefined, undefined, { bypassCache: true, noDelay: true })
-      .then((transfers) => setRows(transfers))
+      .then(({ transfers, total }) => {
+        setRows(transfers);
+        setTotal(total);
+      })
       .catch(() => {});
   });
 
@@ -456,6 +465,23 @@ export default function HistoryPage() {
           </Button>
         </div>
       </div>
+
+      {/* The API serves only the latest rows per view — when the range holds
+          more, say so instead of silently hiding the oldest records. */}
+      {total !== null && total > rows.length && (
+        <div className="flex items-start gap-2.5 rounded border border-brass/50 bg-brass-wash px-4 py-3">
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0 text-brass-deep"
+            strokeWidth={1.75}
+            aria-hidden="true"
+          />
+          <p className="text-xs leading-relaxed text-brass-deep">
+            Showing the latest {fmtAmount(rows.length)} of {fmtAmount(total)} records in this
+            view. Older records are trimmed from this page and from the CSV export — narrow
+            the date range to reach them.
+          </p>
+        </div>
+      )}
 
       {loaded && rows.length === 0 && (
         <div className="rounded border border-hairline bg-card">

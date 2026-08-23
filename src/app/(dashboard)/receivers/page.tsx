@@ -96,9 +96,9 @@ export default function ReceiversPage() {
     let alive = true;
     setLoading(true);
     fetchHistory(range.from ?? undefined, range.to ?? undefined)
-      .then((data) => {
+      .then(({ transfers }) => {
         if (alive) {
-          setTransfers(data || []);
+          setTransfers(transfers || []);
           setLoading(false);
         }
       })

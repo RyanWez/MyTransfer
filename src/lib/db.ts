@@ -144,6 +144,11 @@ const stmtListTransfersRange = db.prepare(
 );
 const stmtDeleteTransfer = db.prepare("DELETE FROM transfers WHERE id = ?");
 
+const stmtCountTransfersAll = db.prepare("SELECT COUNT(*) c FROM transfers");
+const stmtCountTransfersRange = db.prepare(
+  "SELECT COUNT(*) c FROM transfers WHERE created_at >= ? AND created_at <= ?"
+);
+
 const stmtTodayVolumeBySender = db.prepare(
   `SELECT sender_phone, SUM(amount) as volume
    FROM transfers WHERE created_at >= ? AND status = 'success'
@@ -279,6 +284,15 @@ export const dbApi = {
       return stmtListTransfersRange.all(fromTs, toTs, limit) as TransferRow[];
     }
     return stmtListTransfers.all(limit) as TransferRow[];
+  },
+
+  /** Total transfers matching the same filter listTransfers uses — lets the
+   *  client know when the LIMIT trimmed older rows out of its view. */
+  countTransfers(fromTs?: number, toTs?: number): number {
+    if (fromTs !== undefined && toTs !== undefined) {
+      return (stmtCountTransfersRange.get(fromTs, toTs) as { c: number }).c;
+    }
+    return (stmtCountTransfersAll.get() as { c: number }).c;
   },
 
   deleteTransfer(id: number) {
