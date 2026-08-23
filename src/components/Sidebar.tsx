@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gauge, Send, SquareStack, ScrollText, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Gauge, Send, SquareStack, ScrollText, X, ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StatusDot } from "@/components/ui/StatusDot";
 import type { Stats } from "@/lib/types";
@@ -13,6 +13,7 @@ import { fetchStats } from "@/lib/api";
 const items = [
   { href: "/", label: "Overview", icon: Gauge },
   { href: "/transfer", label: "Transfer", icon: Send },
+  { href: "/receivers", label: "Receivers", icon: Users },
   { href: "/sims", label: "SIM tray", icon: SquareStack },
   { href: "/history", label: "History", icon: ScrollText },
 ];

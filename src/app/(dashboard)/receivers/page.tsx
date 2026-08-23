@@ -1,0 +1,240 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Search, ChevronDown } from "lucide-react";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { StatusDot } from "@/components/ui/StatusDot";
+import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
+import { fmtAmount, fmtClock, fmtPhoneGrouped, statusBadge } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { fetchHistory } from "@/lib/api";
+import type { Transfer } from "@/lib/types";
+
+function getInitialTodayRange(): DateRange {
+  const today = new Date();
+  const from = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime() / 1000);
+  const to = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime() / 1000);
+  return { from, to };
+}
+
+function ReceiversSkeleton() {
+  return (
+    <div className="max-w-5xl mx-auto space-y-5 animate-pulse">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="h-5 w-32 bg-substrate rounded" />
+        <div className="flex gap-2.5">
+          <div className="h-8 w-44 sm:w-60 bg-substrate rounded" />
+          <div className="h-8 w-40 bg-substrate rounded" />
+        </div>
+      </div>
+      <section>
+        <div className="overflow-hidden rounded border border-hairline bg-card">
+          <ul className="divide-y divide-hairline">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <li key={i} className="p-4 flex items-center justify-between relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                <div className="h-5 w-32 bg-substrate rounded" />
+                <div className="h-5 w-24 bg-substrate rounded" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+type GroupedReceiver = {
+  phone: string;
+  totalAmount: number;
+  totalFee: number;
+  successCount: number;
+  transfers: Transfer[];
+};
+
+export default function ReceiversPage() {
+  const [range, setRange] = useState<DateRange>(getInitialTodayRange);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetchHistory(range.from ?? undefined, range.to ?? undefined)
+      .then((data) => {
+        if (alive) {
+          setTransfers(data || []);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [range.from, range.to]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, GroupedReceiver>();
+    
+    // Filter first by search
+    const normalizedQuery = searchQuery.replace(/\D/g, "");
+    
+    for (const t of transfers) {
+      if (normalizedQuery && !t.receiver_phone.includes(normalizedQuery)) {
+        continue;
+      }
+      
+      let g = map.get(t.receiver_phone);
+      if (!g) {
+        g = {
+          phone: t.receiver_phone,
+          totalAmount: 0,
+          totalFee: 0,
+          successCount: 0,
+          transfers: []
+        };
+        map.set(t.receiver_phone, g);
+      }
+      
+      g.transfers.push(t);
+      if (t.status === "success") {
+        g.totalAmount += t.amount;
+        g.totalFee += t.fee || 0;
+        g.successCount++;
+      }
+    }
+
+    // Sort by most recent transfer first (or could be totalAmount, but this mirrors history better)
+    return Array.from(map.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [transfers, searchQuery]);
+
+  if (loading) {
+    return <ReceiversSkeleton />;
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-ink-mute">
+          Receivers Log
+        </h1>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-faint" />
+            <input
+              type="text"
+              placeholder="Search receiver..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 w-full sm:w-60 rounded border border-hairline bg-card pl-8 pr-3 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
+            />
+          </div>
+          <DateRangePicker value={range} onChange={setRange} />
+        </div>
+      </div>
+
+      {grouped.length === 0 ? (
+        <EmptyState
+          icon={<Search className="h-6 w-6" />}
+          title="No receivers found"
+          body={
+            searchQuery
+              ? `No transfers matching "${searchQuery}" in this period.`
+              : "No transfers recorded in this period."
+          }
+        />
+      ) : (
+        <div className="overflow-hidden rounded border border-hairline bg-card shadow-sm">
+          <ul className="divide-y divide-hairline flex flex-col">
+            {grouped.map((g) => {
+              const isExpanded = expandedId === g.phone;
+              return (
+                <li key={g.phone} className="flex flex-col">
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : g.phone)}
+                    className={cn(
+                      "flex items-center justify-between p-4 text-left transition-colors hover:bg-white/[0.02]",
+                      isExpanded && "bg-white/[0.02]"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 text-ink-faint transition-transform duration-300",
+                          isExpanded ? "-rotate-180" : "rotate-0"
+                        )}
+                      />
+                      <span className="font-mono text-[15px] font-medium text-ink">
+                        {fmtPhoneGrouped(g.phone)}
+                      </span>
+                      {g.successCount > 0 && (
+                        <span className="rounded-full bg-substrate px-2 py-0.5 font-mono text-[10px] text-ink-mute">
+                          {g.successCount} {g.successCount === 1 ? "transfer" : "transfers"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-base font-medium text-brass-deep tnum">
+                      {fmtAmount(g.totalAmount)} <span className="text-xs text-brass-deep/60">Ks</span>
+                    </div>
+                  </button>
+
+                  {/* Smooth accordion body */}
+                  <div
+                    className={cn(
+                      "grid transition-all duration-300 ease-in-out",
+                      isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    )}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="border-t border-hairline bg-substrate/50 p-4">
+                        <ul className="space-y-3">
+                          {g.transfers.map((t) => (
+                            <li
+                              key={t.id}
+                              className="flex items-center justify-between gap-4 rounded-md border border-hairline bg-card p-3 shadow-sm"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1.5 min-w-[80px]">
+                                  <StatusDot tone={statusBadge(t.status).tone} size="sm" />
+                                  <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">
+                                    {statusBadge(t.status).label}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-mono text-[13px] text-ink">
+                                    From: {fmtPhoneGrouped(t.sender_phone)}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-ink-mute">
+                                    {fmtClock(t.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="font-mono text-[13px] font-medium text-ink tnum">
+                                  {fmtAmount(t.amount)} <span className="text-[10px] text-ink-mute">Ks</span>
+                                </span>
+                                {t.fee > 0 && (
+                                  <span className="font-mono text-[10px] text-ink-mute">
+                                    Fee: {fmtAmount(t.fee)} Ks
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
