@@ -361,7 +361,7 @@ export default function TransferPage() {
             value={receiver}
             onChange={(e) => setReceiver(e.target.value.replace(/[^\d+]/g, ""))}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && sender && receiverValid && amountValid && !busy) {
+              if (e.key === "Enter" && sender && receiverValid && amountValid && !short && !busy) {
                 sendOtp();
               }
             }}
@@ -395,7 +395,7 @@ export default function TransferPage() {
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && sender && receiverValid && amountValid && !busy) {
+              if (e.key === "Enter" && sender && receiverValid && amountValid && !short && !busy) {
                 sendOtp();
               }
             }}
@@ -473,7 +473,7 @@ export default function TransferPage() {
           <Button
             size="lg"
             loading={busy}
-            disabled={!sender || !receiverValid || !amountValid}
+            disabled={!sender || !receiverValid || !amountValid || short}
             onClick={sendOtp}
           >
             {sender ? `Send OTP to ${fmtPhoneGrouped(sender)}` : "Send OTP"}
