@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCw, Trash2, LogIn, Cpu } from "lucide-react";
+import { RefreshCw, Trash2, LogIn, Cpu, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Panel } from "@/components/ui/Panel";
 import { StatusDot } from "@/components/ui/StatusDot";
@@ -19,6 +19,9 @@ export interface SimCardProps {
   refreshing?: boolean;
   className?: string;
   style?: React.CSSProperties;
+  selected?: boolean;
+  selectionMode?: boolean;
+  onSelectToggle?: (sim: Sim) => void;
 }
 
 /**
@@ -33,6 +36,9 @@ function SimCard({
   refreshing,
   className,
   style,
+  selected,
+  selectionMode,
+  onSelectToggle,
 }: SimCardProps) {
   const state = statusBadge(sim.status);
   const active = sim.status === "active";
@@ -40,13 +46,19 @@ function SimCard({
 
   return (
     <Panel
+      as={selectionMode ? "button" : "div"}
+      onClick={selectionMode ? () => onSelectToggle?.(sim) : undefined}
+      active={selected}
       className={cn("group transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg", className)}
       style={style}
       contentClassName="relative flex h-full flex-col p-5 bg-gradient-to-br from-card to-substrate overflow-hidden"
     >
-      {/* Decorative Gold Chip */}
-      <div className="absolute right-4 top-14 opacity-20 transition-opacity duration-300 group-hover:opacity-40 pointer-events-none">
-        <Cpu className="h-10 w-10 text-brass-deep" strokeWidth={1} />
+      <div className={cn("absolute right-4 top-14 transition-opacity duration-300 pointer-events-none", selected ? "opacity-100" : "opacity-20 group-hover:opacity-40")}>
+        {selected ? (
+          <CheckCircle2 className="h-10 w-10 text-brass" strokeWidth={2} />
+        ) : (
+          <Cpu className="h-10 w-10 text-brass-deep" strokeWidth={1} />
+        )}
       </div>
 
       <div className="relative z-10 flex items-center justify-between gap-3">
@@ -86,20 +98,45 @@ function SimCard({
         {active ? (
           <>
             <TokenLife expiresAt={sim.token_expires_at} />
-            <div className="flex shrink-0 items-center gap-0.5">
-              {onRefresh && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onRefresh(sim)}
-                  disabled={refreshing}
-                  aria-label={`Read balance for ${fmtPhoneGrouped(sim.phone)}`}
-                  title="Read balance"
-                >
-                  <RefreshCw
-                    className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
-                    strokeWidth={1.5}
-                  />
+            {!selectionMode && (
+              <div className="flex shrink-0 items-center gap-0.5">
+                {onRefresh && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onRefresh(sim)}
+                    disabled={refreshing}
+                    aria-label={`Read balance for ${fmtPhoneGrouped(sim.phone)}`}
+                    title="Read balance"
+                  >
+                    <RefreshCw
+                      className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
+                      strokeWidth={1.5}
+                    />
+                  </Button>
+                )}
+                {onRemove && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onRemove(sim)}
+                    className="hover:text-alert-deep"
+                    aria-label={`Remove ${fmtPhoneGrouped(sim.phone)}`}
+                    title="Remove SIM"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </Button>
+                )}
+              </div>
+            )}
+          </>
+        ) : (
+          !selectionMode && (
+            <>
+              {onLogin && (
+                <Button variant="secondary" size="sm" onClick={() => onLogin(sim)}>
+                  <LogIn className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                  Log in again
                 </Button>
               )}
               {onRemove && (
@@ -114,29 +151,8 @@ function SimCard({
                   <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                 </Button>
               )}
-            </div>
-          </>
-        ) : (
-          <>
-            {onLogin && (
-              <Button variant="secondary" size="sm" onClick={() => onLogin(sim)}>
-                <LogIn className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
-                Log in again
-              </Button>
-            )}
-            {onRemove && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => onRemove(sim)}
-                className="hover:text-alert-deep"
-                aria-label={`Remove ${fmtPhoneGrouped(sim.phone)}`}
-                title="Remove SIM"
-              >
-                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </Button>
-            )}
-          </>
+            </>
+          )
         )}
       </div>
     </Panel>

@@ -32,6 +32,8 @@ export default function SimsPage() {
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedSims, setSelectedSims] = useState<string[]>([]);
 
   const [loginOpen, setLoginOpen] = useSessionState("login_open", false);
   const [mode, setMode] = useSessionState<LoginMode>("login_mode", "otp");
@@ -51,6 +53,7 @@ export default function SimsPage() {
   const cooldown = loginResendAt > 0 ? Math.max(0, loginResendAt - nowSec) : 0;
 
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
+  const [pendingBulkRemove, setPendingBulkRemove] = useState(false);
 
   const load = useCallback(
     (background = false) => {
@@ -252,6 +255,12 @@ export default function SimsPage() {
     }
   }
 
+  function toggleSelection(sim: Sim) {
+    setSelectedSims((prev) =>
+      prev.includes(sim.phone) ? prev.filter((p) => p !== sim.phone) : [...prev, sim.phone]
+    );
+  }
+
   async function confirmRemove() {
     const sim = pendingRemove;
     if (!sim) return;
@@ -264,6 +273,23 @@ export default function SimsPage() {
     toast.success(`${fmtPhoneGrouped(sim.phone)} removed`, {
       description: "Its transfer history stays in the log.",
     });
+    invalidateCache();
+    load();
+  }
+
+  async function confirmBulkRemove() {
+    if (selectedSims.length === 0) return;
+    setPendingBulkRemove(false);
+    await fetch("/api/sims", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phones: selectedSims }),
+    });
+    toast.success(`${selectedSims.length} SIMs removed`, {
+      description: "Their transfer histories stay in the log.",
+    });
+    setSelectedSims([]);
+    setSelectionMode(false);
     invalidateCache();
     load();
   }
@@ -308,6 +334,23 @@ export default function SimsPage() {
               </button>
             )}
           </div>
+          {sims.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (selectionMode) {
+                  setSelectionMode(false);
+                  setSelectedSims([]);
+                } else {
+                  setSelectionMode(true);
+                }
+              }}
+              className="shrink-0"
+            >
+              {selectionMode ? "Cancel" : "Select"}
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => openLogin()} className="shrink-0 transition-transform hover:scale-105 active:scale-95">
             <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
             Log in a SIM
@@ -378,6 +421,9 @@ export default function SimsPage() {
               onRefresh={refreshBalance}
               onRemove={setPendingRemove}
               onLogin={(sim) => openLogin(sim.phone)}
+              selectionMode={selectionMode}
+              selected={selectedSims.includes(s.phone)}
+              onSelectToggle={toggleSelection}
               className="animate-rise-in"
               style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
             />
@@ -504,7 +550,7 @@ export default function SimsPage() {
 
       {/* Remove */}
       <Dialog open={!!pendingRemove} onOpenChange={(o) => !o && setPendingRemove(null)}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Remove {pendingRemove && fmtPhoneGrouped(pendingRemove.phone)}?</DialogTitle>
             <DialogDescription>
@@ -522,6 +568,55 @@ export default function SimsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Remove */}
+      <Dialog open={pendingBulkRemove} onOpenChange={setPendingBulkRemove}>
+        <DialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Remove {selectedSims.length} SIMs?</DialogTitle>
+            <DialogDescription>
+              This drops the selected SIMs and their stored tokens from the tray. Transfers they already made stay
+              in the history, and you can log them back in any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPendingBulkRemove(false)}>
+              Keep them
+            </Button>
+            <Button variant="destructive" onClick={confirmBulkRemove}>
+              Remove SIMs
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Floating Action Bar for Bulk Select */}
+      {selectionMode && selectedSims.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full bg-card p-2 pr-4 shadow-2xl border border-hairline animate-rise-in">
+          <div className="flex h-10 items-center rounded-full bg-substrate px-4 font-mono text-sm font-semibold">
+            {selectedSims.length} selected
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setPendingBulkRemove(true)}
+            className="rounded-full"
+          >
+            Remove
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectionMode(false);
+              setSelectedSims([]);
+            }}
+            className="rounded-full"
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

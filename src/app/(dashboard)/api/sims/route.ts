@@ -16,8 +16,15 @@ export async function GET() {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { phone } = await req.json();
-  if (!phone) return NextResponse.json({ ok: false }, { status: 400 });
-  dbApi.deleteSim(normalizeMsisdn(phone));
+  const { phone, phones } = await req.json();
+  const targets: string[] = [];
+  if (phone) targets.push(phone);
+  if (Array.isArray(phones)) targets.push(...phones);
+
+  if (targets.length === 0) return NextResponse.json({ ok: false }, { status: 400 });
+
+  for (const p of targets) {
+    dbApi.deleteSim(normalizeMsisdn(p));
+  }
   return NextResponse.json({ ok: true });
 }
