@@ -72,6 +72,10 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        "rise-spring": {
+          from: { opacity: "0", transform: "translateY(12px) scale(0.995)" },
+          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
         "cell-punch": {
           "0%": { transform: "scale(1)" },
           "45%": { transform: "scale(1.06)" },
@@ -89,6 +93,8 @@ const config: Config = {
       },
       animation: {
         "rise-in": "rise-in 380ms cubic-bezier(0.16, 1, 0.3, 1) both",
+        // y overshoots 1 slightly on the way in — a gentle spring settle.
+        "rise-spring": "rise-spring 480ms cubic-bezier(0.22, 1.35, 0.36, 1) both",
         "page-in": "page-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both",
         "cell-punch": "cell-punch 180ms ease-out",
         "led-pulse": "led-pulse 2.4s ease-in-out infinite",

@@ -225,7 +225,7 @@ export default function DashboardPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8">
       {/* The one number the operator opens this page for. */}
-      <section className="animate-rise-in">
+      <section className="animate-rise-spring">
         <Eyebrow>Total available</Eyebrow>
         <div className="mt-2 font-mono text-hero tnum text-brass-deep">
           {stats ? (
@@ -251,20 +251,25 @@ export default function DashboardPage() {
         </p>
       </section>
 
-      {/* One filter row, scoping every figure and curve below it. */}
-      <section className="animate-rise-in space-y-4 [animation-delay:40ms]">
-        <RangePicker
-          preset={preset}
-          onPresetChange={onPreset}
-          from={range.from}
-          to={range.to}
-          onRangeChange={onRangeChange}
-        />
+      {/* One filter row, scoping every figure and curve below it. Each block
+          joins the cascade a beat after the one above it. */}
+      <section className="space-y-4">
+        <div className="animate-rise-spring [animation-delay:60ms]">
+          <RangePicker
+            preset={preset}
+            onPresetChange={onPreset}
+            from={range.from}
+            to={range.to}
+            onRangeChange={onRangeChange}
+          />
+        </div>
 
         {/* Hold the previous render while refetching — no skeleton, no layout jump. */}
         <div className={cn("space-y-6 transition-opacity", loading && data && "opacity-50")}>
-          <MetricStrip
-            items={[
+          <div className="animate-rise-spring [animation-delay:110ms]">
+            <MetricStrip
+              stagger
+              items={[
               { 
                 label: `Success ${period}`, 
                 value: totals?.sent ?? 0,
@@ -287,11 +292,12 @@ export default function DashboardPage() {
                 tone: totals?.volume ? "brass" : "muted",
               },
             ]}
-          />
+            />
+          </div>
 
           {/* Two measures, two charts. Counts and Ks share no scale, so they never
               share an axis. */}
-          <div className="rounded border border-hairline bg-card px-4 py-4">
+          <div className="animate-rise-spring [animation-delay:170ms] rounded border border-hairline bg-card px-4 py-4">
             <div className="mb-1 flex items-baseline justify-between gap-4">
               <Eyebrow>Transfers</Eyebrow>
               <span className="font-mono text-eyebrow uppercase text-ink-faint">
@@ -307,7 +313,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          <div className="rounded border border-hairline bg-card px-4 py-4">
+          <div className="animate-rise-spring [animation-delay:230ms] rounded border border-hairline bg-card px-4 py-4">
             <div className="mb-1 flex items-baseline justify-between gap-4">
               <Eyebrow>Volume moved</Eyebrow>
               <span className="font-mono text-eyebrow uppercase text-ink-faint">Ks</span>
@@ -322,7 +328,7 @@ export default function DashboardPage() {
           </div>
 
           {data?.topErrors && data.topErrors.length > 0 && (
-            <div className="rounded border border-hairline bg-card px-4 py-4">
+            <div className="animate-rise-spring [animation-delay:290ms] rounded border border-hairline bg-card px-4 py-4">
               <div className="mb-4 flex items-baseline justify-between gap-4">
                 <Eyebrow>Top Error Reasons</Eyebrow>
                 <span className="font-mono text-eyebrow uppercase text-ink-faint">
@@ -335,8 +341,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="animate-rise-in [animation-delay:80ms]">
-        <div className="mb-3 flex items-baseline justify-between gap-4">
+      <section>
+        <div className="animate-rise-spring [animation-delay:320ms] mb-3 flex items-baseline justify-between gap-4">
           <Eyebrow>Recent</Eyebrow>
           <Link
             href="/history"
@@ -346,15 +352,16 @@ export default function DashboardPage() {
           </Link>
         </div>
 
-        <div className="overflow-hidden rounded border border-hairline bg-card">
+        <div className="animate-rise-spring [animation-delay:350ms] overflow-hidden rounded border border-hairline bg-card">
           {stats?.recent.length ? (
             <ul className="divide-y divide-hairline">
-              {stats.recent.map((t) => {
+              {stats.recent.map((t, i) => {
                 const badge = statusBadge(t.status);
                 return (
                   <li
                     key={t.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-substrate"
+                    style={{ animationDelay: `${380 + Math.min(i, 8) * 40}ms` }}
+                    className="animate-rise-spring flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 transition-colors hover:bg-substrate"
                   >
                     <StatusDot tone={badge.tone} size="sm" />
                     <span className="shrink-0 font-mono text-xs tnum text-ink-mute">

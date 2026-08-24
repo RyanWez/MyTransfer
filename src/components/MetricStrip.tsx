@@ -70,8 +70,19 @@ function PunchOnChange({
  * Metrics as hairline-divided columns rather than boxed cards — one less border
  * per figure, and it reads as an instrument panel. `gap-px` over a hairline
  * background gives exact 1px dividers that survive wrapping.
+ *
+ * `stagger` lets each cell rise in sequence on mount — used by the dashboard's
+ * entrance cascade.
  */
-function MetricStrip({ items, className }: { items: Metric[]; className?: string }) {
+function MetricStrip({
+  items,
+  className,
+  stagger,
+}: {
+  items: Metric[];
+  className?: string;
+  stagger?: boolean;
+}) {
   return (
     <div
       className={cn(
@@ -80,8 +91,12 @@ function MetricStrip({ items, className }: { items: Metric[]; className?: string
         className
       )}
     >
-      {items.map((m) => (
-        <div key={m.label} className="bg-card px-4 py-3.5">
+      {items.map((m, i) => (
+        <div
+          key={m.label}
+          style={stagger ? { animationDelay: `${i * 60}ms` } : undefined}
+          className={cn("bg-card px-4 py-3.5", stagger && "animate-rise-spring")}
+        >
           <div className="font-mono text-eyebrow font-semibold uppercase text-ink-mute">
             {m.label}
           </div>

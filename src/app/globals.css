@@ -43,6 +43,17 @@
 }
 
 @layer base {
+  html {
+    /* Anchor and programmatic scrolls glide instead of teleporting. */
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
   body {
     background: rgb(var(--substrate));
     color: rgb(var(--ink));
