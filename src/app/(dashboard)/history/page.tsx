@@ -406,7 +406,14 @@ export default function HistoryPage() {
               placeholder="Search sender, receiver, amount, error..."
               className="h-8 w-full rounded border border-hairline bg-card pl-8 pr-7 text-xs text-ink placeholder:text-ink-faint transition-colors focus:border-brass focus:outline-none focus:ring-1 focus:ring-brass"
             />
-            {searchInput && (
+            {/* While a committed query is in flight the clear button gives way
+                to a spinner — the round-trip is visible right where you typed. */}
+            {loading && query ? (
+              <span
+                className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 animate-spin rounded-full border-[1.5px] border-ink-faint border-t-transparent"
+                aria-hidden="true"
+              />
+            ) : searchInput ? (
               <button
                 type="button"
                 onClick={() => applyQueryNow("")}
@@ -415,7 +422,7 @@ export default function HistoryPage() {
               >
                 <X className="h-3.5 w-3.5" />
               </button>
-            )}
+            ) : null}
           </div>
 
           <SegmentedControl

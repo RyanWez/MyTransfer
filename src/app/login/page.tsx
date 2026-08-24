@@ -31,6 +31,10 @@ function LoginForm() {
   const [error, setError] = React.useState<string | null>(null);
   const [locked, setLocked] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  // Set once the password checks out and the redirect is in flight — the
+  // button must NOT spring back to "Unlock" while a slow network works on
+  // navigation, or operators re-click thinking nothing happened.
+  const [succeeded, setSucceeded] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -58,9 +62,10 @@ function LoginForm() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || locked) return;
+    if (busy || locked || succeeded) return;
     setBusy(true);
     setError(null);
+    let ok = false;
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -69,6 +74,8 @@ function LoginForm() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
+        ok = true;
+        setSucceeded(true);
         // Only allow same-site relative destinations.
         const next = params.get("next");
         router.replace(next && next.startsWith("/") ? next : "/");
@@ -91,7 +98,9 @@ function LoginForm() {
     } catch {
       setError("Network error — try again");
     } finally {
-      setBusy(false);
+      // Hold the pending state through the redirect; only failures hand the
+      // button back.
+      if (!ok) setBusy(false);
     }
   }
 
@@ -149,9 +158,9 @@ function LoginForm() {
             type="submit"
             className="mt-4 w-full"
             loading={busy}
-            disabled={locked || !password || (totpRequired && totpCode.length !== 6)}
+            disabled={locked || succeeded || !password || (totpRequired && totpCode.length !== 6)}
           >
-            {busy ? "Checking…" : "Unlock"}
+            {busy ? (succeeded ? "Opening…" : "Checking…") : "Unlock"}
           </Button>
 
           {locked && (

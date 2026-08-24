@@ -55,6 +55,9 @@ export default function SimsPage() {
 
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
   const [pendingBulkRemove, setPendingBulkRemove] = useState(false);
+  // The destructive buttons spin until the server confirms — the dialogs stay
+  // open through the request so a slow link never looks like nothing happened.
+  const [deleting, setDeleting] = useState(false);
   // Focused when the login dialog opens, so a number can be typed immediately.
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
@@ -240,35 +243,52 @@ export default function SimsPage() {
 
   async function confirmRemove() {
     const sim = pendingRemove;
-    if (!sim) return;
-    setPendingRemove(null);
-    await fetch("/api/sims", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: sim.phone }),
-    });
-    toast.success(`${fmtPhoneGrouped(sim.phone)} removed`, {
-      description: "Its transfer history stays in the log.",
-    });
-    invalidateCache();
-    load();
+    if (!sim || deleting) return;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/sims", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: sim.phone }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(`${fmtPhoneGrouped(sim.phone)} removed`, {
+        description: "Its transfer history stays in the log.",
+      });
+      setPendingRemove(null);
+      invalidateCache();
+      load();
+    } catch {
+      toast.error("Couldn't remove the SIM", { description: "Network error — try again." });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function confirmBulkRemove() {
-    if (selectedSims.length === 0) return;
-    setPendingBulkRemove(false);
-    await fetch("/api/sims", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phones: selectedSims }),
-    });
-    toast.success(`${selectedSims.length} SIMs removed`, {
-      description: "Their transfer histories stay in the log.",
-    });
-    setSelectedSims([]);
-    setSelectionMode(false);
-    invalidateCache();
-    load();
+    if (selectedSims.length === 0 || deleting) return;
+    const phones = selectedSims;
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/sims", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phones }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(`${phones.length} SIMs removed`, {
+        description: "Their transfer histories stay in the log.",
+      });
+      setSelectedSims([]);
+      setSelectionMode(false);
+      setPendingBulkRemove(false);
+      invalidateCache();
+      load();
+    } catch {
+      toast.error("Couldn't remove the SIMs", { description: "Network error — try again." });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const canSubmit = mode === "otp" ? otp.length === 6 : password.length > 0;
@@ -548,10 +568,10 @@ export default function SimsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setPendingRemove(null)}>
+            <Button variant="ghost" onClick={() => setPendingRemove(null)} disabled={deleting}>
               Keep it
             </Button>
-            <Button variant="destructive" onClick={confirmRemove}>
+            <Button variant="destructive" loading={deleting} onClick={confirmRemove}>
               Remove SIM
             </Button>
           </DialogFooter>
@@ -569,10 +589,10 @@ export default function SimsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setPendingBulkRemove(false)}>
+            <Button variant="ghost" onClick={() => setPendingBulkRemove(false)} disabled={deleting}>
               Keep them
             </Button>
-            <Button variant="destructive" onClick={confirmBulkRemove}>
+            <Button variant="destructive" loading={deleting} onClick={confirmBulkRemove}>
               Remove SIMs
             </Button>
           </DialogFooter>

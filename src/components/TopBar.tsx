@@ -7,6 +7,7 @@ import { LogOut, Menu, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { OPEN_COMMAND_PALETTE } from "@/components/CommandPalette";
+import { cn } from "@/lib/utils";
 
 const PAGES: Record<string, { title: string; sub: string }> = {
   "/": { title: "Overview", sub: "Balances, daily capacity, and today's transfers" },
@@ -20,8 +21,12 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const page = PAGES[pathname] ?? { title: "MyShare", sub: "" };
+  // Feedback for the round-trip — a slow link must not look like a dead one.
+  const [loggingOut, setLoggingOut] = React.useState(false);
 
   async function logout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } finally {
@@ -78,10 +83,14 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
             variant="ghost"
             size="icon"
             onClick={logout}
+            disabled={loggingOut}
             aria-label="Log out"
-            title="Log out"
+            title={loggingOut ? "Logging out…" : "Log out"}
           >
-            <LogOut className="h-4 w-4" strokeWidth={1.5} />
+            <LogOut
+              className={cn("h-4 w-4", loggingOut && "animate-pulse")}
+              strokeWidth={1.5}
+            />
           </Button>
         </div>
       </div>

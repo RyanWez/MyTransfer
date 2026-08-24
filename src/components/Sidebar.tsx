@@ -14,8 +14,8 @@ import { fetchStats } from "@/lib/api";
 const items = [
   { href: "/", label: "Overview", icon: Gauge },
   { href: "/transfer", label: "Transfer", icon: Send },
-  { href: "/receivers", label: "Receivers", icon: Users },
   { href: "/sims", label: "SIM tray", icon: SquareStack },
+  { href: "/receivers", label: "Receivers", icon: Users },
   { href: "/history", label: "History", icon: ScrollText },
 ];
 
@@ -38,6 +38,43 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
   const [fleet, setFleet] = React.useState<{ total: number; active: number } | null>(null);
   const liveStatus = useLiveStatus();
   const led = liveLed[liveStatus];
+
+  // ---- Sliding active marker ---------------------------------------------
+  // One brass bar that glides between nav items instead of each item owning
+  // a marker that pops in and out — same device as the segmented-control pill,
+  // rotated vertical. Measured against the real DOM so it survives collapse,
+  // resize and font swaps.
+  const navRef = React.useRef<HTMLElement>(null);
+  const [marker, setMarker] = React.useState<{ top: number; height: number } | null>(null);
+
+  const measureMarker = React.useCallback(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const activeIdx = items.findIndex((it) =>
+      it.href === "/" ? pathname === "/" : pathname.startsWith(it.href)
+    );
+    const links = nav.querySelectorAll<HTMLElement>("a[data-nav]");
+    const el = activeIdx >= 0 ? links[activeIdx] : undefined;
+    if (!el) {
+      setMarker(null);
+      return;
+    }
+    // Inset by 4px top and bottom — the old marker's `inset-y-1` rhythm.
+    setMarker({ top: el.offsetTop + 4, height: el.offsetHeight - 8 });
+  }, [pathname]);
+
+  React.useEffect(() => {
+    measureMarker();
+  }, [measureMarker]);
+
+  React.useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => measureMarker());
+    ro.observe(nav);
+    document.fonts?.ready.then(() => measureMarker()).catch(() => {});
+    return () => ro.disconnect();
+  }, [measureMarker]);
 
   // Uses deduplicated cached fetchStats so route navigation shares in-flight requests with Dashboard
   React.useEffect(() => {
@@ -108,7 +145,16 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3">
+        <nav ref={navRef} className="relative flex-1 overflow-y-auto py-3">
+          {/* The shared marker — glides to whichever link is active. */}
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute left-0 w-[2px] rounded-r bg-brass transition-[top,height] duration-300 ease-out",
+              !marker && "opacity-0"
+            )}
+            style={{ top: marker?.top ?? 0, height: marker?.height ?? 0 }}
+          />
           {items.map((it) => {
             const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
             const Icon = it.icon;
@@ -116,6 +162,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
               <Link
                 key={it.href}
                 href={it.href}
+                data-nav
                 onClick={onClose}
                 title={collapsed ? it.label : undefined}
                 aria-current={active ? "page" : undefined}
@@ -125,14 +172,6 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                   active ? "text-white bg-white/[0.08]" : "text-white/50 hover:text-white/90 hover:bg-white/[0.03]"
                 )}
               >
-                {/* 2px brass marker instead of a filled block — the rail stays quiet. */}
-                <span
-                  className={cn(
-                    "absolute inset-y-1 left-0 w-[2px] rounded-r transition-colors",
-                    active ? "bg-brass" : "bg-transparent"
-                  )}
-                  aria-hidden="true"
-                />
                 <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
                 {!collapsed && <span className="truncate">{it.label}</span>}
               </Link>
