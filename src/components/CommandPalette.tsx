@@ -129,8 +129,14 @@ export function CommandPalette() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && setQuery("")}>
-      <DialogContent
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        // Esc, the ✕ button and overlay clicks all funnel through here.
+        setOpen(o);
+        if (!o) setQuery("");
+      }}
+    >      <DialogContent
         // self-start + top margin biases the launcher toward the upper third,
         // like a spotlight rather than a dead-center modal.
         className="mt-[12vh] max-w-lg self-start gap-0 p-0"
