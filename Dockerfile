@@ -34,6 +34,9 @@ RUN apt-get update \
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Standalone output excludes public/ — PWA assets (manifest, sw.js, icons)
+# live here and must be carried into the runner explicitly.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # Backup helper (runs via `fly ssh console`); needs nothing beyond the
 # standalone tree's own node_modules.
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
