@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import PwaRegister from "@/components/PwaRegister";
 
 // Plex was drawn for technical systems and its sans and mono were designed
 // together — the figures line up between a label and the number beside it.
@@ -22,9 +23,24 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "MyShare · Mytel transfer console",
   description: "Send Mytel balance between SIMs and keep the log.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "MyShare",
+  },
   icons: {
     icon: "/favicon.ico",
+    apple: "/icons/apple-touch-icon.png",
   },
+};
+
+// Chrome picks the title-bar / OS-chrome color from here; both themes covered.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F2F0EC" },
+    { media: "(prefers-color-scheme: dark)", color: "#222634" },
+  ],
 };
 
 export default function RootLayout({
@@ -35,6 +51,7 @@ export default function RootLayout({
       <body className="min-h-screen antialiased bg-substrate text-ink selection:bg-brass-soft selection:text-ink">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
+          <PwaRegister />
         </ThemeProvider>
       </body>
     </html>

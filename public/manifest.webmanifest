@@ -1,0 +1,17 @@
+{
+  "name": "MyShare · Mytel transfer console",
+  "short_name": "MyShare",
+  "description": "Send Mytel balance between SIMs and keep the log.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#222634",
+  "theme_color": "#222634",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

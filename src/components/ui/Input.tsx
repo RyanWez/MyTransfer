@@ -9,13 +9,15 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   helperText?: string;
   iconLeft?: React.ReactNode;
   iconRight?: React.ReactNode;
+  /** Clickable element docked inside the right edge — e.g. a "Paste" chip. */
+  actionRight?: React.ReactNode;
   /** Suffix rendered inside the field — e.g. "Ks" on an amount input. */
   suffix?: string;
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   (
-    { className, label, error, helperText, iconLeft, iconRight, suffix, id, ...props },
+    { className, label, error, helperText, iconLeft, iconRight, actionRight, suffix, id, ...props },
     ref
   ) => {
     const generatedId = React.useId();
@@ -47,7 +49,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
               "focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass",
               "disabled:cursor-not-allowed disabled:bg-substrate disabled:text-ink-mute",
               iconLeft && "pl-10",
-              (iconRight || suffix) && "pr-10",
+              (actionRight || iconRight || suffix) && "pr-11",
               error
                 ? "border-alert focus:border-alert focus:ring-alert"
                 : "border-hairline hover:border-hairline-strong",
@@ -58,12 +60,15 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             aria-describedby={cn(errorId, helperId) || undefined}
             {...props}
           />
-          {suffix && (
+          {actionRight && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2">{actionRight}</div>
+          )}
+          {suffix && !actionRight && (
             <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-ink-faint">
               {suffix}
             </div>
           )}
-          {iconRight && !suffix && (
+          {iconRight && !suffix && !actionRight && (
             <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint">
               {iconRight}
             </div>

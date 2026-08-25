@@ -344,7 +344,22 @@ export const dbApi = {
     if (!sets.length) return;
     vals.push(id);
     db.prepare(`UPDATE transfers SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
-    sse.emit("update");
+    // A settled result (success/failed) is broadcast with its details so a
+    // background tab can raise an OS notification without re-fetching.
+    if (fields.status === "success" || fields.status === "failed") {
+      const row = stmtGetTransferById.get(id) as TransferRow | undefined;
+      sse.emit("update", {
+        kind: "transfer:result",
+        id,
+        status: fields.status,
+        sender: row?.sender_phone ?? "",
+        receiver: row?.receiver_phone ?? "",
+        amount: row?.amount ?? 0,
+        message: fields.message ?? row?.message ?? null,
+      });
+    } else {
+      sse.emit("update");
+    }
   },
 
   listTransfers(limit = 1000, fromTs?: number, toTs?: number): TransferRow[] {

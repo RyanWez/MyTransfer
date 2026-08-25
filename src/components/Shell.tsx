@@ -4,6 +4,7 @@ import * as React from "react";
 import Sidebar from "@/components/Sidebar";
 import TopBar from "@/components/TopBar";
 import { CommandPalette } from "@/components/CommandPalette";
+import NotificationBridge from "@/components/NotificationBridge";
 
 /** Holds the mobile drawer state shared by the rail and the top bar. */
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       </div>
       {/* App-wide ⌘K launcher; portal-renders above everything. */}
       <CommandPalette />
+      {/* Turns background SSE transfer results into OS notifications. */}
+      <NotificationBridge />
     </div>
   );
 }

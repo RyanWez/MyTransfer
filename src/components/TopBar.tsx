@@ -3,10 +3,19 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Menu, Plus, Search } from "lucide-react";
+import { BellOff, BellRing, LogOut, Menu, Plus, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { OPEN_COMMAND_PALETTE } from "@/components/CommandPalette";
+import {
+  chime,
+  disableNotifs,
+  enableNotifs,
+  notifEnabled,
+  notifPermission,
+  notifSupported,
+} from "@/lib/notifications";
 import { cn } from "@/lib/utils";
 
 const PAGES: Record<string, { title: string; sub: string }> = {
@@ -23,6 +32,39 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
   const page = PAGES[pathname] ?? { title: "MyShare", sub: "" };
   // Feedback for the round-trip — a slow link must not look like a dead one.
   const [loggingOut, setLoggingOut] = React.useState(false);
+
+  // Background notifications: off by default, opted in via the bell.
+  const [notifOn, setNotifOn] = React.useState(false);
+  const [notifSupportedState, setNotifSupportedState] = React.useState(false);
+  const [notifBusy, setNotifBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    setNotifSupportedState(notifSupported());
+    setNotifOn(notifEnabled());
+  }, []);
+
+  async function toggleNotifications() {
+    if (notifBusy) return;
+    setNotifBusy(true);
+    try {
+      if (notifOn) {
+        disableNotifs();
+        setNotifOn(false);
+        toast("Background notifications off");
+        return;
+      }
+      const result = await enableNotifs();
+      setNotifOn(notifEnabled());
+      if (result === "enabled") {
+        chime(true); // audible confirmation of the exact sound to expect
+        toast.success("Background notifications on — alerts while the tab is hidden");
+      } else {
+        toast.error("Notification permission denied — allow it from this site in your browser settings");
+      }
+    } finally {
+      setNotifBusy(false);
+    }
+  }
 
   async function logout() {
     if (loggingOut) return;
@@ -70,6 +112,32 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
           >
             <Search className="h-4 w-4" strokeWidth={1.8} />
           </Button>
+          {notifSupportedState && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={toggleNotifications}
+              disabled={notifBusy}
+              aria-label={notifOn ? "Notifications on" : "Notifications off"}
+              title={
+                notifOn
+                  ? "Background notifications on — click to turn off"
+                  : "Get notified when transfers finish while this tab is hidden"
+              }
+              className={cn(
+                "border transition-all duration-200",
+                notifOn
+                  ? "border-brass/40 text-brass hover:bg-brass-wash hover:text-brass-deep"
+                  : "text-ink-mute hover:text-ink hover:bg-card border-transparent hover:border-hairline"
+              )}
+            >
+              {notifOn ? (
+                <BellRing className="h-4 w-4" strokeWidth={1.8} />
+              ) : (
+                <BellOff className="h-4 w-4" strokeWidth={1.8} />
+              )}
+            </Button>
+          )}
           <ThemeToggle />
           {pathname !== "/transfer" && (
             <Button asChild size="sm">

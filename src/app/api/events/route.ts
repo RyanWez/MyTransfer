@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const enc = new TextEncoder();
   let heartbeat: ReturnType<typeof setInterval> | null = null;
-  let onUpdate: (() => void) | null = null;
+  let onUpdate: ((payload?: unknown) => void) | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -30,9 +30,13 @@ export async function GET(req: NextRequest) {
         controller.enqueue(enc.encode("retry: 3000\n: heartbeat\n\n"));
       } catch {}
 
-      onUpdate = () => {
+      onUpdate = (payload?: unknown) => {
         try {
-          controller.enqueue(enc.encode("data: update\n\n"));
+          const line =
+            payload === undefined
+              ? "data: update\n\n"
+              : `data: update ${JSON.stringify(payload)}\n\n`;
+          controller.enqueue(enc.encode(line));
         } catch {
           // controller closed, cleanup will happen via abort/cancel
         }

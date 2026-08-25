@@ -12,13 +12,26 @@ import { useEffect, useRef, useSyncExternalStore } from "react";
 
 export type LiveStatus = "connecting" | "online" | "offline";
 
+/** Structured payloads the server may attach to an "update" event. */
+export interface TransferResultUpdate {
+  kind: "transfer:result";
+  id: number;
+  status: "success" | "failed";
+  sender: string;
+  receiver: string;
+  amount: number;
+  message?: string | null;
+}
+
+export type LiveUpdate = TransferResultUpdate;
+
 let es: EventSource | null = null;
 let status: LiveStatus = "connecting";
 let retries = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 const statusListeners = new Set<() => void>();
-const updateListeners = new Set<() => void>();
+const updateListeners = new Set<(u?: LiveUpdate) => void>();
 
 function setStatus(next: LiveStatus) {
   if (next === status) return;
@@ -37,7 +50,20 @@ function connect() {
   };
 
   es.onmessage = (e) => {
-    if (e.data === "update") updateListeners.forEach((fn) => fn());
+    if (e.data === "update") {
+      updateListeners.forEach((fn) => fn());
+      return;
+    }
+    // "update {json}" — a plain update with a structured payload attached.
+    if (typeof e.data === "string" && e.data.startsWith("update ")) {
+      try {
+        const payload = JSON.parse(e.data.slice(7)) as LiveUpdate;
+        updateListeners.forEach((fn) => fn(payload));
+      } catch {
+        // Malformed payload — degrade to a plain update ping.
+        updateListeners.forEach((fn) => fn());
+      }
+    }
   };
 
   es.onerror = () => {
@@ -68,7 +94,7 @@ if (typeof window !== "undefined") {
 }
 
 /** Subscribe to server "update" events; returns the connection status too. */
-export function useLive(onUpdate?: () => void): LiveStatus {
+export function useLive(onUpdate?: (u?: LiveUpdate) => void): LiveStatus {
   return useLiveInternal(onUpdate);
 }
 
@@ -93,14 +119,14 @@ function getServerSnapshot(): LiveStatus {
   return "connecting";
 }
 
-function useLiveInternal(onUpdate?: () => void): LiveStatus {
-  const cbRef = useRef<(() => void) | undefined>(onUpdate);
+function useLiveInternal(onUpdate?: (u?: LiveUpdate) => void): LiveStatus {
+  const cbRef = useRef<((u?: LiveUpdate) => void) | undefined>(onUpdate);
   cbRef.current = onUpdate;
 
   useEffect(() => {
     ensureConnected();
     if (!cbRef.current) return;
-    const fn = () => cbRef.current?.();
+    const fn = (u?: LiveUpdate) => cbRef.current?.(u);
     updateListeners.add(fn);
     return () => {
       updateListeners.delete(fn);

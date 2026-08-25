@@ -38,6 +38,9 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next's own static assets.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Everything except Next's own static assets and the public PWA files
+  // (the service worker must be fetchable as JS or its registration fails).
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/).*)",
+  ],
 };

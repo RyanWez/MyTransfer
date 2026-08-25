@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowRight, Check, Search, SquareStack, X } from "lucide-react";
+import { ArrowRight, Check, ClipboardPaste, Search, SquareStack, X } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -167,6 +167,23 @@ export default function TransferPage() {
       return;
     }
     toast.error(fallback, { description: r.error || r.message || undefined });
+  }
+
+  /** Telegram-copy workflow: one tap fills the receiver from the clipboard. */
+  async function pasteReceiver() {
+    if (locked) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      const cleaned = text.replace(/[^\d+]/g, "").slice(0, 15);
+      if (!cleaned) {
+        toast.error("Clipboard has no phone number");
+        return;
+      }
+      setReceiver(cleaned);
+      toast.success(`Pasted ${fmtPhoneGrouped(cleaned)}`);
+    } catch {
+      toast.error("Clipboard access denied — paste manually (long-press → Paste)");
+    }
   }
 
   async function sendOtp() {
@@ -409,6 +426,25 @@ export default function TransferPage() {
             autoComplete="off"
             className="font-mono"
             helperText="Any Mytel number, including one not in the tray."
+            actionRight={
+              <button
+                type="button"
+                tabIndex={-1}
+                disabled={locked}
+                onClick={pasteReceiver}
+                aria-label="Paste number from clipboard"
+                title="Paste from clipboard"
+                className={cn(
+                  "flex h-7 items-center gap-1.5 rounded border border-hairline bg-substrate px-2",
+                  "font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-mute",
+                  "transition-colors hover:border-brass hover:text-brass-deep",
+                  "disabled:cursor-not-allowed disabled:opacity-50"
+                )}
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" strokeWidth={1.8} />
+                Paste
+              </button>
+            }
           />
           {recentContacts.length > 0 && !locked && (
             <div className="mt-2.5 flex flex-wrap gap-2">
