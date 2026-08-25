@@ -221,7 +221,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
           </button>
         </div>
 
-        <nav ref={navRef} className="relative flex-1 overflow-y-auto py-3">
+        <nav ref={navRef} className="relative flex-1 overflow-y-auto overflow-x-hidden py-3">
           {/* The shared marker — glides to whichever link is active. */}
           <span
             aria-hidden="true"
@@ -245,43 +245,60 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                 style={padMotion(collapsed)}
                 className={cn(
                   "relative flex items-center py-2.5 font-mono text-eyebrow font-semibold uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brass",
-                  // Padding animates too, so icons glide between centered
-                  // (collapsed) and left-aligned (expanded) instead of jumping.
-                  collapsed ? "justify-center px-0" : "gap-3 pl-5 pr-4",
+                  // The icon centers by gliding its padding to the exact offset
+                  // ((80 - 16) / 2 = 32px) — justify-content can't transition, so
+                  // a justify-center swap would teleport the icon every toggle.
+                  collapsed ? "pl-8 pr-0" : "pl-5 pr-4",
                   active ? "text-white bg-white/[0.08]" : "text-white/50 hover:text-white/90 hover:bg-white/[0.03]"
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-                <RailLabel collapsed={collapsed} delay={100 + i * 45}>
-                  {it.label}
-                </RailLabel>
+                {/* Icon in a fixed slot; the label hangs off it absolutely, so
+                    collapsing text can never push the icon around. */}
+                <span className="relative flex shrink-0">
+                  <Icon className="h-4 w-4" strokeWidth={1.5} aria-hidden="true" />
+                  <RailLabel
+                    collapsed={collapsed}
+                    delay={100 + i * 45}
+                    className="absolute left-full top-1/2 ml-3 -translate-y-1/2"
+                  >
+                    {it.label}
+                  </RailLabel>
+                </span>
               </Link>
             );
           })}
         </nav>
 
         <div
-          className={cn("border-t border-white/10 py-4", collapsed ? "px-2" : "px-5")}
+          className={cn("border-t border-white/10 py-4", collapsed ? "px-0" : "px-5")}
           style={{ transition: collapsed ? `padding 340ms ${EASE_COLLAPSE}` : `padding 480ms ${EASE_EXPAND}` }}
         >
           <div
             className={cn(
               "flex items-center font-mono text-[10px] tracking-wider uppercase text-white/60",
-              collapsed ? "justify-center" : "gap-2"
+              collapsed ? "pl-8" : "pl-0"
             )}
             style={padMotion(collapsed)}
             title={led.title}
           >
-            <StatusDot tone={led.tone} size="sm" pulse={led.pulse} />
-            <RailLabel collapsed={collapsed} delay={220} className="tnum">
-              {fleet ? (
-                <span className="text-white/70">
-                  {fleet.active} of {fleet.total} SIMs active
-                </span>
-              ) : (
-                <span className="text-white/35">Reading tray…</span>
-              )}
-            </RailLabel>
+            {/* Same fixed-slot trick as the nav icons: a 16px box keeps the LED
+                on the identical glide path, whatever the dot's own size. */}
+            <span className="relative flex h-4 w-4 shrink-0 items-center justify-center">
+              <StatusDot tone={led.tone} size="sm" pulse={led.pulse} />
+              <RailLabel
+                collapsed={collapsed}
+                delay={220}
+                className="absolute left-full top-1/2 ml-2.5 -translate-y-1/2 tnum"
+              >
+                {fleet ? (
+                  <span className="text-white/70">
+                    {fleet.active} of {fleet.total} SIMs active
+                  </span>
+                ) : (
+                  <span className="text-white/35">Reading tray…</span>
+                )}
+              </RailLabel>
+            </span>
           </div>
         </div>
       </aside>
