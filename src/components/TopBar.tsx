@@ -7,6 +7,7 @@ import { BellOff, BellRing, LogOut, Menu, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import InstallButton from "@/components/InstallButton";
 import { OPEN_COMMAND_PALETTE } from "@/components/CommandPalette";
 import {
   chime,
@@ -138,6 +139,7 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
               )}
             </Button>
           )}
+          <InstallButton />
           <ThemeToggle />
           {pathname !== "/transfer" && (
             <Button asChild size="sm">
