@@ -599,31 +599,35 @@ export default function SimsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Floating Action Bar for Bulk Select */}
+      {/* Floating Action Bar for Bulk Select — the wrapper owns the centering
+          translate; the entrance animation fills with its own transform and
+          would otherwise wipe the -translate-x-1/2 once it settles. */}
       {selectionMode && selectedSims.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full bg-card p-2 pr-4 shadow-2xl border border-hairline animate-rise-in">
-          <div className="flex h-10 items-center rounded-full bg-substrate px-4 font-mono text-sm font-semibold">
-            {selectedSims.length} selected
+        <div className="fixed bottom-6 left-1/2 z-50 max-w-[calc(100vw-2rem)] -translate-x-1/2">
+          <div className="flex animate-rise-in items-center gap-2 rounded-full border border-hairline bg-card p-2 pr-2 shadow-2xl sm:gap-4 sm:pr-4">
+            <div className="flex h-10 items-center rounded-full bg-substrate px-3 font-mono text-sm font-semibold sm:px-4">
+              {selectedSims.length} selected
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setPendingBulkRemove(true)}
+              className="rounded-full"
+            >
+              Remove
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectionMode(false);
+                setSelectedSims([]);
+              }}
+              className="rounded-full"
+            >
+              Cancel
+            </Button>
           </div>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setPendingBulkRemove(true)}
-            className="rounded-full"
-          >
-            Remove
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSelectionMode(false);
-              setSelectedSims([]);
-            }}
-            className="rounded-full"
-          >
-            Cancel
-          </Button>
         </div>
       )}
     </div>

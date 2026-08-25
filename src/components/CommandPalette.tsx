@@ -137,9 +137,11 @@ export function CommandPalette() {
         if (!o) setQuery("");
       }}
     >      <DialogContent
-        // self-start + top margin biases the launcher toward the upper third,
-        // like a spotlight rather than a dead-center modal.
-        className="mt-[12vh] max-w-lg self-start gap-0 p-0"
+        // Anchored 12vh from the top (not center+margin): on short/landscape
+        // phone viewports a centered dialog plus its list can spill off-screen.
+        // The height caps keep the whole launcher inside the viewport, with the
+        // results list scrolling internally.
+        className="top-[12vh] max-h-[calc(100dvh-16vh)] max-w-lg translate-y-0 self-start gap-0 overflow-y-auto p-0"
         onKeyDown={onKeyDown}
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
@@ -165,7 +167,7 @@ export function CommandPalette() {
           </kbd>
         </div>
 
-        <div ref={listRef} id="command-palette-list" role="listbox" className="max-h-72 overflow-y-auto p-2">
+        <div ref={listRef} id="command-palette-list" role="listbox" className="max-h-[min(18rem,50dvh)] overflow-y-auto p-2">
           {filtered.length === 0 && (
             <p className="px-3 py-6 text-center text-sm text-ink-mute">
               Nothing matches &quot;{query}&quot;

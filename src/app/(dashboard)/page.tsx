@@ -254,7 +254,9 @@ export default function DashboardPage() {
       {/* One filter row, scoping every figure and curve below it. Each block
           joins the cascade a beat after the one above it. */}
       <section className="space-y-4">
-        <div className="animate-rise-spring [animation-delay:60ms]">
+        {/* relative z-20 keeps the date-picker popover above the cards below even
+            while the entrance cascade is still running its transforms. */}
+        <div className="animate-rise-spring relative z-20 [animation-delay:60ms]">
           <RangePicker
             preset={preset}
             onPresetChange={onPreset}

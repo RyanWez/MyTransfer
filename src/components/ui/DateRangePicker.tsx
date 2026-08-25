@@ -379,10 +379,9 @@ export function DateRangePicker({
       {open && (
         <div
           className={cn(
-            "absolute z-50 mt-1.5 overflow-hidden rounded-lg border border-hairline bg-card p-4 shadow-2xl animate-rise-in",
+            "absolute z-50 mt-1.5 w-[min(320px,calc(100vw-2.5rem))] overflow-hidden rounded-lg border border-hairline bg-card p-4 shadow-2xl animate-rise-in sm:w-auto sm:min-w-[320px]",
             align === "right" ? "right-0" : "left-0"
           )}
-          style={{ minWidth: "320px" }}
         >
           {/* Quick Presets Bar */}
           <div className="flex flex-wrap items-center gap-1.5 pb-3.5 mb-3.5 border-b border-hairline">

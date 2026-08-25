@@ -80,7 +80,7 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
 
   return (
     <header className="sticky top-0 z-30 flex min-h-[70px] transform-gpu flex-col justify-center border-b border-hairline bg-substrate/70 backdrop-blur-[8px]">
-      <div className="flex items-center gap-4 px-5 py-2 md:px-8">
+      <div className="flex items-center gap-3 px-4 py-2 sm:gap-4 sm:px-5 md:px-8">
         <Button
           variant="ghost"
           size="icon"
@@ -92,7 +92,7 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
         </Button>
 
         <div className="min-w-0 flex-1">
-          <h1 className="font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-ink">
+          <h1 className="truncate font-mono text-[13px] font-semibold uppercase tracking-[0.12em] text-ink">
             {page.title}
           </h1>
           {/* Hidden rather than truncated on narrow screens — a subtitle clipped
@@ -102,7 +102,8 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        {/* gap-1 on phones: six controls must share the row with the title. */}
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -142,16 +143,18 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
           <InstallButton />
           <ThemeToggle />
           {pathname !== "/transfer" && (
-            <Button asChild size="sm">
-              <Link href="/transfer">
+            <Button asChild size="sm" className="px-2.5 sm:px-3">
+              <Link href="/transfer" aria-label="New transfer">
                 <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
-                New transfer
+                {/* Icon-only on phones — the label alone would push the row
+                    past a 360px viewport. */}
+                <span className="hidden sm:inline">New transfer</span>
               </Link>
             </Button>
           )}
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={logout}
             disabled={loggingOut}
             aria-label="Log out"

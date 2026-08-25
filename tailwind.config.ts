@@ -64,17 +64,20 @@ const config: Config = {
         dialog: "0 16px 48px rgba(20, 22, 26, 0.18)",
       },
       keyframes: {
+        // Entrances settle at `transform: none` — a lingering translateY(0)/scale(1)
+        // would keep a stacking context alive on every animated block and trap
+        // z-indexed popovers (date picker) beneath later siblings.
         "rise-in": {
           from: { opacity: "0", transform: "translateY(6px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "1", transform: "none" },
         },
         "page-in": {
           from: { opacity: "0", transform: "translateY(10px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
+          to: { opacity: "1", transform: "none" },
         },
         "rise-spring": {
           from: { opacity: "0", transform: "translateY(12px) scale(0.995)" },
-          to: { opacity: "1", transform: "translateY(0) scale(1)" },
+          to: { opacity: "1", transform: "none" },
         },
         "cell-punch": {
           "0%": { transform: "scale(1)" },
