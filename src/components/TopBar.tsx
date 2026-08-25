@@ -79,7 +79,7 @@ export default function TopBar({ onMenu }: { onMenu: () => void }) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-[70px] flex-col justify-center border-b border-hairline bg-substrate/85 backdrop-blur-sm">
+    <header className="sticky top-0 z-30 flex min-h-[70px] transform-gpu flex-col justify-center border-b border-hairline bg-substrate/70 backdrop-blur-[8px]">
       <div className="flex items-center gap-4 px-5 py-2 md:px-8">
         <Button
           variant="ghost"

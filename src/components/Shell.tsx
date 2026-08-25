@@ -19,7 +19,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed(!collapsed)}
       />
-      <div className="flex min-w-0 flex-1 flex-col transition-all duration-300 ease-in-out">
+      <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenu={() => setMenuOpen(true)} />
         <main className="flex-1 px-5 py-6 md:px-8 md:py-8">{children}</main>
       </div>
