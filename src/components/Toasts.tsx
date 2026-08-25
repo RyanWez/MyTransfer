@@ -4,34 +4,58 @@ import { useEffect } from "react";
 import { Toaster, toast } from "sonner";
 import { CheckCircle2, CircleAlert } from "lucide-react";
 
+const DEFAULT_MS = 4000;
+const SWEEP_MS = 500;
+/** Small grace so sonner's own timer (when unfrozen) always wins the race. */
+const GRACE_MS = 300;
+
 /**
- * Toasts carry every action result now — the old inline amber/rose message boxes
+ * Toasts carry every action result — the old inline amber/rose message boxes
  * pushed the layout around. Modern top-center stack with smooth slide.
- * Error toasts stay longer than success (main fix).
+ *
+ * Why the sweeper: sonner v2 hard-freezes its own dismissal timers while the
+ * pointer rests on the stack (expanded) or the tab is hidden — there is no
+ * opt-out, and Alt-Tabbing away never fires mouseleave, so the freeze latches.
+ * With the notification bell on, the operator's workflow hits both constantly
+ * and toasts piled up without ever dismissing. This interval reads sonner's
+ * store directly and dismisses each toast once its real age passes its
+ * duration — a clock sonner can't pause (throttled while hidden, flushed the
+ * moment the tab comes back).
  */
 export default function Toasts() {
   useEffect(() => {
-    // Patch durations globally from main: success 3.5s, error 6.5s, others 4s
-    const anyToast = toast as unknown as Record<string, unknown>;
-    if (anyToast._patched) return;
-    anyToast._patched = true;
-    const origSuccess = toast.success.bind(toast);
-    const origError = toast.error.bind(toast);
-    const orig = (toast as unknown as { (msg: string, opts?: Record<string, unknown>): unknown }).bind(
-      toast
-    );
-    (toast as unknown as Record<string, unknown>).success = (
-      msg: Parameters<typeof toast.success>[0],
-      opts?: Parameters<typeof toast.success>[1]
-    ) => origSuccess(msg, { duration: 3500, ...opts } as never);
-    (toast as unknown as Record<string, unknown>).error = (
-      msg: Parameters<typeof toast.error>[0],
-      opts?: Parameters<typeof toast.error>[1]
-    ) => origError(msg, { duration: 6500, ...opts } as never);
-    // generic toast() -> 4s
-    try {
-      (toast as unknown as Record<string, unknown>).__orig = orig;
-    } catch {}
+    const seen = new Map<string | number, number>();
+
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const alive = new Set<string | number>();
+
+      for (const t of toast.getToasts()) {
+        alive.add(t.id);
+        // Dismissal stubs carry no duration — only live toasts get aged out.
+        if (!("duration" in t)) continue;
+        if (t.type === "loading" || t.duration === Infinity) continue;
+
+        const first = seen.get(t.id);
+        if (first === undefined) {
+          seen.set(t.id, now);
+          continue;
+        }
+        if (now - first >= (t.duration ?? DEFAULT_MS) + GRACE_MS) {
+          toast.dismiss(t.id);
+        }
+      }
+
+      // Toasts sonner already removed leave the map.
+      for (const id of seen.keys()) {
+        if (!alive.has(id)) seen.delete(id);
+      }
+    }, SWEEP_MS);
+
+    return () => {
+      clearInterval(timer);
+      seen.clear();
+    };
   }, []);
 
   return (
@@ -56,7 +80,7 @@ export default function Toasts() {
       }}
       toastOptions={{
         unstyled: true,
-        duration: 4000,
+        duration: DEFAULT_MS,
         classNames: {
           toast:
             "group flex w-[92vw] max-w-[440px] items-start gap-3 rounded-2xl border border-hairline bg-card/95 px-4 py-3.5 shadow-[0_10px_40px_-12px_rgba(0,0,0,0.35)] backdrop-blur-xl " +
