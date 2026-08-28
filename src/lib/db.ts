@@ -297,6 +297,40 @@ const stmtActiveTotalBalance = db.prepare(
   "SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'"
 );
 
+/** One receiver's activity in a range, as the Receivers page renders it. */
+export interface ReceiverGroup {
+  phone: string;
+  totalAmount: number;
+  totalFee: number;
+  successCount: number;
+  /** Most recent successful transfer in the range. */
+  lastAt: number;
+  transfers: TransferRow[];
+}
+
+/**
+ * Upper bound on rows behind one Receivers view. Generous next to any realistic
+ * range, and unlike the old client-side paging it bounds a single query rather
+ * than silently stopping part-way through an aggregate.
+ */
+const RECEIVER_ROW_CAP = 200_000;
+
+const stmtSuccessfulTransfers = db.prepare(
+  `SELECT ${TRANSFER_COLUMNS} FROM transfers
+   WHERE status = 'success' AND created_at >= ? AND created_at <= ?
+   ORDER BY created_at DESC, id DESC LIMIT ?`
+);
+const stmtSuccessfulTransfersBySender = db.prepare(
+  `SELECT ${TRANSFER_COLUMNS} FROM transfers
+   WHERE status = 'success' AND created_at >= ? AND created_at <= ? AND sender_phone = ?
+   ORDER BY created_at DESC, id DESC LIMIT ?`
+);
+const stmtSuccessfulSenders = db.prepare(
+  `SELECT DISTINCT sender_phone FROM transfers
+   WHERE status = 'success' AND created_at >= ? AND created_at <= ?
+   ORDER BY sender_phone`
+);
+
 /**
  * One-time pass to wrap tokens that predate encryption.
  *
@@ -550,6 +584,65 @@ export const dbApi = {
   /** Returns top 5 reasons for failed transfers in the time range. */
   topErrors(fromTs: number, toTs: number): { reason: string; count: number }[] {
     return stmtTopErrors.all(fromTs, toTs) as { reason: string; count: number }[];
+  },
+
+  /**
+   * Successful transfers in a range, grouped by receiver.
+   *
+   * The Receivers page used to page the whole log over HTTP and group it in the
+   * browser — one request per 100 rows, re-run from scratch on every live push,
+   * with the aggregate silently truncating once the log outgrew the client's page
+   * ceiling. SQLite does the grouping in a single indexed pass instead.
+   *
+   * Each group keeps its own transfers because the page expands a receiver to show
+   * them, and re-derives totals when a sender filter is applied.
+   *
+   * Both bounds are optional so the picker's "All Time" means what it says.
+   */
+  receiversInRange(
+    fromTs?: number,
+    toTs?: number,
+    sender?: string
+  ): { groups: ReceiverGroup[]; senders: string[]; transferCount: number } {
+    const from = fromTs ?? 0;
+    const to = toTs ?? Number.MAX_SAFE_INTEGER;
+
+    const rows = (sender
+      ? stmtSuccessfulTransfersBySender.all(from, to, sender, RECEIVER_ROW_CAP)
+      : stmtSuccessfulTransfers.all(from, to, RECEIVER_ROW_CAP)) as TransferRow[];
+
+    const byReceiver = new Map<string, ReceiverGroup>();
+    for (const row of rows) {
+      let group = byReceiver.get(row.receiver_phone);
+      if (!group) {
+        group = {
+          phone: row.receiver_phone,
+          totalAmount: 0,
+          totalFee: 0,
+          successCount: 0,
+          lastAt: 0,
+          transfers: [],
+        };
+        byReceiver.set(row.receiver_phone, group);
+      }
+      group.transfers.push(row);
+      group.totalAmount += row.amount;
+      group.totalFee += row.fee || 0;
+      group.successCount += 1;
+      if (row.created_at > group.lastAt) group.lastAt = row.created_at;
+    }
+
+    // The sender list must cover the whole range, not just the filtered slice, or
+    // choosing a sender would empty the dropdown that chose it.
+    const senders = (
+      stmtSuccessfulSenders.all(from, to) as { sender_phone: string }[]
+    ).map((r) => r.sender_phone);
+
+    return {
+      groups: [...byReceiver.values()],
+      senders,
+      transferCount: rows.length,
+    };
   },
 
   /** Tray-wide figures that don't depend on the selected date range. */

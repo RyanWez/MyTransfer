@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorBanner, ErrorState } from "@/components/ui/ErrorState";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
@@ -27,7 +28,7 @@ import {
   statusBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fetchHistoryPage, invalidateCache, type HistoryPage } from "@/lib/api";
+import { ApiError, fetchHistoryPage, invalidateCache, type HistoryPage } from "@/lib/api";
 import { useLive } from "@/lib/liveEvents";
 import type { Transfer } from "@/lib/types";
 
@@ -227,6 +228,12 @@ export default function HistoryPage() {
   const [data, setData] = useState<HistoryPage | null>(null);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sequence guard. Typing through the filters or clicking pagination quickly
+  // leaves several requests open at once, and without this whichever resolves
+  // last wins — so an older page could land under the newer filter.
+  const requestSeq = useRef(0);
 
   // ---- Delete dialog state -------------------------------------------------
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -248,6 +255,7 @@ export default function HistoryPage() {
 
   const runFetch = useCallback(
     (opts?: { bypass?: boolean }) => {
+      const seq = ++requestSeq.current;
       setLoading(true);
       if (opts?.bypass) invalidateCache("history");
       fetchHistoryPage(
@@ -261,9 +269,17 @@ export default function HistoryPage() {
         },
         { bypassCache: opts?.bypass, noDelay: true }
       )
-        .then((res) => setData(res))
-        .catch(() => {})
+        .then((res) => {
+          if (seq !== requestSeq.current) return;
+          setData(res);
+          setError(null);
+        })
+        .catch((err) => {
+          if (seq !== requestSeq.current) return;
+          setError(err instanceof ApiError ? err.userMessage : "Something went wrong reading this.");
+        })
         .finally(() => {
+          if (seq !== requestSeq.current) return;
           setLoading(false);
           setInitialLoaded(true);
         });
@@ -377,8 +393,31 @@ export default function HistoryPage() {
     return <HistorySkeleton />;
   }
 
+  // Nothing read at all: "0 attempts" would read as a quiet day, not a failure.
+  if (error && !data) {
+    return (
+      <div className="max-w-5xl mx-auto pt-6">
+        <ErrorState
+          what="the transfer history"
+          detail={error}
+          onRetry={() => runFetch({ bypass: true })}
+          retrying={loading}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
+      {/* A refresh that failed with rows already on screen keeps them and says so. */}
+      {error && data && (
+        <ErrorBanner
+          what="the transfer history"
+          detail={error}
+          onRetry={() => runFetch({ bypass: true })}
+          retrying={loading}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="whitespace-nowrap font-mono text-eyebrow font-semibold uppercase tnum text-ink-mute">
           {fmtAmount(total)} {total === 1 ? "attempt" : "attempts"}

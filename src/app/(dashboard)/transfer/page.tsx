@@ -16,7 +16,7 @@ import { Receipt, ReceiptRow, ReceiptDivider } from "@/components/Receipt";
 import { fmtKs, fmtPhoneGrouped, fmtStamp } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { fetchSims, invalidateCache } from "@/lib/api";
-import { useNowSec } from "@/lib/useNowSec";
+import { CooldownSeconds, useCooldownActive } from "@/components/Cooldown";
 import { useSessionState } from "@/lib/useSessionState";
 import { useLocalState } from "@/lib/useLocalState";
 import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
@@ -87,8 +87,9 @@ export default function TransferPage() {
   const [recentContacts, setRecentContacts] = useLocalState<string[]>("recent_contacts", []);
   const [resendAt, setResendAt] = useSessionState("transfer_resendAt", 0);
 
-  const nowSec = useNowSec();
-  const cooldown = resendAt > 0 ? Math.max(0, resendAt - nowSec) : 0;
+  // Only the boolean lives here; the ticking digit is a leaf, so the whole form —
+  // SIM chips, limit bars, receipt — isn't re-rendered once a second.
+  const cooldownActive = useCooldownActive(resendAt);
 
   const loadSims = useCallback(() => {
     return fetchSims()
@@ -109,13 +110,15 @@ export default function TransferPage() {
 
   const selected = sims.find((s) => s.phone === sender);
   const senderBalance = selected?.balance ?? null;
-  const activeSims = sims.filter((s) => s.status === "active");
   // Pickable SIMs first. Unusable ones still render — so it's clear why a SIM is
   // missing — but they belong after the choices, not above them.
-  const orderedSims = useMemo(
-    () => [...activeSims, ...sims.filter((s) => s.status !== "active")],
-    [sims, activeSims]
-  );
+  // Derived inside the memo: a filter() in the dependency array is a fresh array
+  // every render, which made this and displayedSims recompute unconditionally.
+  const orderedSims = useMemo(() => {
+    const active = sims.filter((s) => s.status === "active");
+    return [...active, ...sims.filter((s) => s.status !== "active")];
+  }, [sims]);
+  const activeSims = useMemo(() => sims.filter((s) => s.status === "active"), [sims]);
 
   const displayedSims = useMemo(() => {
     if (searchQuery.trim()) {
@@ -544,8 +547,11 @@ export default function TransferPage() {
           <Eyebrow>Enter OTP</Eyebrow>
           <p className="mt-1.5 text-sm text-ink-mute">
             Sent by SMS to {fmtPhoneGrouped(sender)}
-            {cooldown > 0 && (
-              <span className="font-mono tnum text-ink-faint"> · resend in {cooldown}s</span>
+            {cooldownActive && (
+              <span className="font-mono tnum text-ink-faint">
+                {" "}
+                · resend in <CooldownSeconds at={resendAt} />s
+              </span>
             )}
           </p>
           <div className="mt-3.5">
@@ -577,8 +583,14 @@ export default function TransferPage() {
             >
               Confirm {fmtKs(total)} debit
             </Button>
-            <Button variant="outline" size="lg" disabled={busy || cooldown > 0} onClick={sendOtp}>
-              {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend OTP"}
+            <Button variant="outline" size="lg" disabled={busy || cooldownActive} onClick={sendOtp}>
+              {cooldownActive ? (
+                <>
+                  Resend in <CooldownSeconds at={resendAt} />s
+                </>
+              ) : (
+                "Resend OTP"
+              )}
             </Button>
             <Button variant="ghost" size="lg" disabled={busy} onClick={reset}>
               Cancel

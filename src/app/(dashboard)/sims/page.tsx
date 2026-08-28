@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { OtpInput } from "@/components/ui/OtpInput";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorBanner, ErrorState } from "@/components/ui/ErrorState";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import {
   Dialog,
@@ -18,10 +19,10 @@ import {
 } from "@/components/ui/Dialog";
 import { SimCard, SimCardSkeleton } from "@/components/SimCard";
 import { fmtKs, fmtPhoneGrouped, sameNumber } from "@/lib/format";
-import { fetchSims, invalidateCache } from "@/lib/api";
+import { fetchSims, invalidateCache, ApiError } from "@/lib/api";
 import { useLive } from "@/lib/liveEvents";
 import { useSessionState } from "@/lib/useSessionState";
-import { useNowSec } from "@/lib/useNowSec";
+import { CooldownSeconds, useCooldownActive } from "@/components/Cooldown";
 import type { Sim } from "@/lib/types";
 
 type LoginMode = "otp" | "password";
@@ -31,6 +32,7 @@ type Flow = "login" | "register";
 export default function SimsPage() {
   const [sims, setSims] = useState<Sim[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
@@ -50,8 +52,9 @@ export default function SimsPage() {
   const [regSubId, setRegSubId] = useSessionState<string | null>("login_regSubId", null);
   
   const [loginResendAt, setLoginResendAt] = useSessionState("login_resendAt", 0);
-  const nowSec = useNowSec();
-  const cooldown = loginResendAt > 0 ? Math.max(0, loginResendAt - nowSec) : 0;
+  // Only the boolean lives here; the ticking digit is a leaf inside the dialog, so
+  // the tray isn't re-rendered once a second for the length of every cooldown.
+  const cooldownActive = useCooldownActive(loginResendAt);
 
   const [pendingRemove, setPendingRemove] = useState<Sim | null>(null);
   const [pendingBulkRemove, setPendingBulkRemove] = useState(false);
@@ -71,8 +74,13 @@ export default function SimsPage() {
       if (!background) setLoaded(false);
       const opts = background ? { bypassCache: true, noDelay: true } : undefined;
       fetchSims(opts)
-        .then((all) => setSims(all))
-        .catch(() => {})
+        .then((all) => {
+          setSims(all);
+          setError(null);
+        })
+        .catch((err) => {
+          setError(err instanceof ApiError ? err.userMessage : "Something went wrong reading this.");
+        })
         .finally(() => setLoaded(true));
     },
     []
@@ -85,9 +93,7 @@ export default function SimsPage() {
   // Shared app-wide EventSource: refetch on pushes, reconnect with backoff.
   useLive(() => {
     invalidateCache("sims");
-    fetchSims({ bypassCache: true, noDelay: true })
-      .then((all) => setSims(all))
-      .catch(() => {});
+    load(true);
   });
 
   const filteredSims = useMemo(() => {
@@ -360,12 +366,31 @@ export default function SimsPage() {
         </div>
       </div>
 
+      {/* A refresh that failed with cards already on screen keeps them and says so. */}
+      {error && sims.length > 0 && (
+        <ErrorBanner
+          what="the SIM tray"
+          detail={error}
+          onRetry={() => load(true)}
+          retrying={!loaded}
+        />
+      )}
+
       {!loaded ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <SimCardSkeleton key={i} />
           ))}
         </div>
+      ) : error && sims.length === 0 ? (
+        // Distinguish "no SIMs" from "couldn't read the SIMs" — the empty-tray
+        // illustration below made a failed read look like the tray was wiped.
+        <ErrorState
+          what="the SIM tray"
+          detail={error}
+          onRetry={() => load(true)}
+          retrying={!loaded}
+        />
       ) : loaded && sims.length === 0 ? (
         <EmptyState
           icon={
@@ -506,7 +531,11 @@ export default function SimsPage() {
                     <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                       <div className="mb-2 flex items-center justify-between font-mono text-eyebrow font-semibold uppercase text-ink-mute">
                         <span>Code from SMS</span>
-                        {cooldown > 0 && <span className="text-ink-faint">resend in {cooldown}s</span>}
+                        {cooldownActive && (
+                          <span className="text-ink-faint">
+                            resend in <CooldownSeconds at={loginResendAt} />s
+                          </span>
+                        )}
                       </div>
 
                       <div className="mt-1">
@@ -545,8 +574,14 @@ export default function SimsPage() {
               Cancel
             </Button>
             {mode === "otp" && otpSent && (
-              <Button variant="outline" onClick={requestOtp} disabled={busy || cooldown > 0}>
-                {cooldown > 0 ? `Resend (${cooldown}s)` : "Resend"}
+              <Button variant="outline" onClick={requestOtp} disabled={busy || cooldownActive}>
+                {cooldownActive ? (
+                  <>
+                    Resend (<CooldownSeconds at={loginResendAt} />s)
+                  </>
+                ) : (
+                  "Resend"
+                )}
               </Button>
             )}
             {mode === "otp" && !otpSent ? (

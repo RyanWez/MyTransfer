@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, SquareStack } from "lucide-react";
 import { Eyebrow } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorBanner, ErrorState } from "@/components/ui/ErrorState";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { Button } from "@/components/ui/Button";
 import { MetricStrip } from "@/components/MetricStrip";
@@ -20,10 +21,10 @@ import {
   statusBadge,
 } from "@/lib/format";
 import { ErrorPieChart } from "@/components/ErrorPieChart";
-import { CHART_INK, customRange, presetRange, type RangeKey } from "@/lib/chart";
+import { CHART_INK, presetRange, type RangeKey } from "@/lib/chart";
 import { DAILY_VOLUME_LIMIT, MONTHLY_VOLUME_LIMIT } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { fetchStats, invalidateCache } from "@/lib/api";
+import { ApiError, fetchStats, invalidateCache } from "@/lib/api";
 import { useLive } from "@/lib/liveEvents";
 import type { StatsResponse } from "@/lib/types";
 
@@ -90,33 +91,54 @@ export default function DashboardPage() {
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const rangeRef = useRef(range);
   useEffect(() => {
     rangeRef.current = range;
   }, [range]);
 
+  const reload = useCallback((background = false) => {
+    if (!background) setLoading(true);
+    const opts = background ? { bypassCache: true, noDelay: true } : undefined;
+    const r = rangeRef.current;
+    return fetchStats(r.from, r.to, opts)
+      .then((d: StatsResponse) => {
+        if (d?.ok) {
+          setData(d);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.userMessage : "Something went wrong reading this.");
+      })
+      .finally(() => {
+        setLoading(false);
+        setLoaded(true);
+      });
+  }, []);
+
   useEffect(() => {
     let alive = true;
 
-    function load(background = false) {
-      if (!background) setLoading(true);
-      const opts = background ? { bypassCache: true, noDelay: true } : undefined;
-      const r = background ? rangeRef.current : range;
-      fetchStats(r.from, r.to, opts)
-        .then((d: StatsResponse) => {
-          if (alive && d?.ok) setData(d);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (alive) {
-            setLoading(false);
-            setLoaded(true);
-          }
-        });
-    }
-
-    load();
+    setLoading(true);
+    fetchStats(range.from, range.to)
+      .then((d: StatsResponse) => {
+        if (!alive) return;
+        if (d?.ok) {
+          setData(d);
+          setError(null);
+        }
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setError(err instanceof ApiError ? err.userMessage : "Something went wrong reading this.");
+      })
+      .finally(() => {
+        if (!alive) return;
+        setLoading(false);
+        setLoaded(true);
+      });
 
     return () => {
       alive = false;
@@ -127,10 +149,7 @@ export default function DashboardPage() {
   // Connection health shows as the LED in the sidebar footer.
   useLive(() => {
     invalidateCache();
-    const r = rangeRef.current;
-    fetchStats(r.from, r.to, { bypassCache: true, noDelay: true })
-      .then((d: StatsResponse) => setData(d))
-      .catch(() => {});
+    reload(true);
   });
 
   const onPreset = useCallback((key: RangeKey) => {
@@ -204,6 +223,21 @@ export default function DashboardPage() {
     return <DashboardSkeleton />;
   }
 
+  // Nothing read at all: an unreachable server used to render as "—" and
+  // "Reading the tray…" forever, indistinguishable from a slow load.
+  if (error && !data) {
+    return (
+      <div className="mx-auto max-w-5xl pt-6">
+        <ErrorState
+          what="the dashboard"
+          detail={error}
+          onRetry={() => reload(true)}
+          retrying={loading}
+        />
+      </div>
+    );
+  }
+
   if (loaded && stats && stats.simCount === 0) {
     return (
       <EmptyState
@@ -224,6 +258,17 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
+      {/* A refresh that failed with figures already on screen: keep them, and be
+          explicit that they are the last good read rather than the current one. */}
+      {error && data && (
+        <ErrorBanner
+          what="the dashboard"
+          detail={error}
+          onRetry={() => reload(true)}
+          retrying={loading}
+        />
+      )}
+
       {/* The one number the operator opens this page for. */}
       <section className="animate-rise-spring">
         <Eyebrow>Total available</Eyebrow>

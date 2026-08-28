@@ -4,14 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, ChevronDown, ChevronLeft, ChevronRight, Copy, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorBanner, ErrorState } from "@/components/ui/ErrorState";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { fmtAmount, fmtClock, fmtPhone, fmtPhoneGrouped, phoneSearchKeys } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fetchAllTransfers, invalidateCache } from "@/lib/api";
+import { ApiError, fetchReceivers, invalidateCache } from "@/lib/api";
 import { useLive } from "@/lib/liveEvents";
 import { toast } from "sonner";
-import type { Transfer } from "@/lib/types";
+import type { ReceiverGroup } from "@/lib/types";
 
 function getInitialTodayRange(): DateRange {
   const today = new Date();
@@ -70,14 +71,7 @@ function getPaginationRange(current: number, total: number): (number | "...")[] 
   return [1, "...", current - 1, current, current + 1, "...", total];
 }
 
-type GroupedReceiver = {
-  phone: string;
-  totalAmount: number;
-  totalFee: number;
-  successCount: number;
-  lastAt: number;
-  transfers: Transfer[];
-};
+type GroupedReceiver = ReceiverGroup;
 
 /** Copies a paste-ready local number (09...) — grouped display stays for reading. */
 async function copyToClipboard(text: string) {
@@ -128,7 +122,9 @@ export default function ReceiversPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [initialLoaded, setInitialLoaded] = useState(false);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [groups, setGroups] = useState<GroupedReceiver[]>([]);
+  const [senders, setSenders] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
@@ -144,23 +140,43 @@ export default function ReceiversPage() {
   const hasFilters =
     searchQuery.trim() !== "" || senderFilter !== "" || minAmount > 0 || minCount > 0;
 
+  // Sequence guard: the range picker and the sender dropdown can both fire while
+  // an earlier request is still open, and without this the slower one wins and
+  // renders totals that don't match the controls.
+  const requestSeq = useRef(0);
+
   const runFetch = useCallback(
     (opts?: { bypass?: boolean }) => {
+      // Both bounds may be null — that is the picker's "All Time", not a missing
+      // range, and it must still fetch.
+      const from = range.from ?? undefined;
+      const to = range.to ?? undefined;
+
+      const seq = ++requestSeq.current;
       setLoading(true);
-      if (opts?.bypass) invalidateCache("history");
-      fetchAllTransfers(
-        range.from ?? undefined,
-        range.to ?? undefined,
-        { bypassCache: opts?.bypass, noDelay: true }
-      )
-        .then((data) => setTransfers(data || []))
-        .catch(() => {})
+      if (opts?.bypass) invalidateCache("receivers");
+
+      fetchReceivers(from, to, senderFilter || undefined, {
+        bypassCache: opts?.bypass,
+        noDelay: true,
+      })
+        .then((data) => {
+          if (seq !== requestSeq.current) return;
+          setGroups(data.groups);
+          setSenders(data.senders);
+          setError(null);
+        })
+        .catch((err) => {
+          if (seq !== requestSeq.current) return;
+          setError(err instanceof ApiError ? err.userMessage : "Something went wrong reading this.");
+        })
         .finally(() => {
+          if (seq !== requestSeq.current) return;
           setLoading(false);
           setInitialLoaded(true);
         });
     },
-    [range]
+    [range, senderFilter]
   );
 
   useEffect(() => {
@@ -175,56 +191,13 @@ export default function ReceiversPage() {
   });
   useLive(() => fetchRef.current({ bypass: true }));
 
-  /** Every sender seen in range — powers the sender dropdown. */
-  const senders = useMemo(() => {
-    const set = new Set<string>();
-    for (const t of transfers) {
-      if (t.status === "success") set.add(t.sender_phone);
-    }
-    return [...set].sort((a, b) => fmtPhoneGrouped(a).localeCompare(fmtPhoneGrouped(b)));
-  }, [transfers]);
-
-  // Filter transfers first (sender + receiver search), then aggregate — so a
-  // sender filter changes each receiver's totals, not just hides rows.
-  const filteredTransfers = useMemo(() => {
-    const digits = searchQuery.toLowerCase().replace(/[\s-+]/g, "");
-    return transfers.filter((t) => {
-      // Success only — failed/pending attempts never reach the receivers log.
-      if (t.status !== "success") return false;
-      if (senderFilter && t.sender_phone !== senderFilter) return false;
-      if (
-        digits &&
-        !phoneSearchKeys(t.receiver_phone).some((k) => k.includes(digits))
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [transfers, searchQuery, senderFilter]);
-
+  // The sender filter resolves server-side, so what arrives is already scoped;
+  // the receiver search and the thresholds stay here to answer every keystroke.
   const allGroups = useMemo(() => {
-    const map = new Map<string, GroupedReceiver>();
-    for (const t of filteredTransfers) {
-      let g = map.get(t.receiver_phone);
-      if (!g) {
-        g = {
-          phone: t.receiver_phone,
-          totalAmount: 0,
-          totalFee: 0,
-          successCount: 0,
-          lastAt: 0,
-          transfers: [],
-        };
-        map.set(t.receiver_phone, g);
-      }
-      g.transfers.push(t);
-      g.totalAmount += t.amount;
-      g.totalFee += t.fee || 0;
-      g.successCount++;
-      if (t.created_at > g.lastAt) g.lastAt = t.created_at;
-    }
-    return [...map.values()];
-  }, [filteredTransfers]);
+    const digits = searchQuery.toLowerCase().replace(/[\s-+]/g, "");
+    if (!digits) return groups;
+    return groups.filter((g) => phoneSearchKeys(g.phone).some((k) => k.includes(digits)));
+  }, [groups, searchQuery]);
 
   // Group-level thresholds + ordering.
   const grouped = useMemo(() => {
@@ -272,6 +245,21 @@ export default function ReceiversPage() {
 
   if (!initialLoaded) {
     return <ReceiversSkeleton />;
+  }
+
+  // Nothing read at all yet: say so rather than rendering "0 receivers", which
+  // reads as a quiet period instead of a failure.
+  if (error && groups.length === 0) {
+    return (
+      <div className="max-w-5xl mx-auto pt-6">
+        <ErrorState
+          what="the receivers log"
+          detail={error}
+          onRetry={() => runFetch({ bypass: true })}
+          retrying={loading}
+        />
+      </div>
+    );
   }
 
   return (
@@ -415,6 +403,17 @@ export default function ReceiversPage() {
             </button>
           )}
         </div>
+      )}
+
+      {/* A refresh that failed while a list is already on screen: say it, keep the
+          list, and let the operator retry without losing their place. */}
+      {error && groups.length > 0 && (
+        <ErrorBanner
+          what="the receivers log"
+          detail={error}
+          onRetry={() => runFetch({ bypass: true })}
+          retrying={loading}
+        />
       )}
 
       {grouped.length === 0 ? (

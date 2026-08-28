@@ -30,6 +30,24 @@ export interface Transfer {
   created_at: number;
 }
 
+/** One receiver's activity in a range, grouped server-side by /api/receivers. */
+export interface ReceiverGroup {
+  phone: string;
+  totalAmount: number;
+  totalFee: number;
+  successCount: number;
+  /** Most recent successful transfer in the range. */
+  lastAt: number;
+  transfers: Transfer[];
+}
+
+export interface ReceiversResponse {
+  groups: ReceiverGroup[];
+  /** Every sender seen in the range, filter applied or not — powers the dropdown. */
+  senders: string[];
+  transferCount: number;
+}
+
 export interface Stats {
   simCount: number;
   loggedIn: number;
