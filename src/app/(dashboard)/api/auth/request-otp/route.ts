@@ -7,6 +7,7 @@ import {
   apiOk,
 } from "@/lib/mytel";
 import { dbApi } from "@/lib/db";
+import { limitFromEnv, rateLimit } from "@/lib/rateLimit";
 
 /** What the client must do with the code once it arrives. */
 type Flow = "login" | "register";
@@ -19,6 +20,63 @@ const lastOtpAt = new Map<string, number>();
 // One request-otp in flight per number at a time, so a double-click can't race two
 // sends past the cooldown check before either records itself.
 const inFlight = new Set<string>();
+
+// Every accepted request puts a real SMS on Mytel's network at Mytel's expense.
+// The 45s cooldown above only spaces out repeats to the *same* number, so on its own
+// it leaves a session free to walk through unlimited numbers, one SMS each. These two
+// budgets bound that: a ceiling on total sends, and a ceiling per target number so one
+// number can't be used as the target of an SMS flood.
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const SMS_TOTAL_BUCKET = "otp:total";
+const SMS_NUMBER_BUCKET = "otp:number";
+
+/**
+ * Reserve one SMS against both budgets, or explain the wait.
+ *
+ * `peek` runs before the account lookup so an over-budget caller is turned away
+ * without touching Mytel; the same call without `peek` spends the reservation at
+ * the moment a send is actually dispatched.
+ */
+function smsBudget(msisdn: string, peek: boolean): NextResponse | null {
+  const opts = { peek };
+  const perNumber = rateLimit(
+    SMS_NUMBER_BUCKET,
+    msisdn,
+    limitFromEnv("OTP_DAILY_PER_NUMBER", 10),
+    DAY_MS,
+    opts
+  );
+  if (!perNumber.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "Too many codes sent to this number today. Try again tomorrow.",
+      },
+      { status: 429, headers: { "Retry-After": String(perNumber.retryAfterSec) } }
+    );
+  }
+
+  const total = rateLimit(
+    SMS_TOTAL_BUCKET,
+    "all",
+    limitFromEnv("OTP_HOURLY_LIMIT", 30),
+    HOUR_MS,
+    opts
+  );
+  if (!total.allowed) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Hourly OTP limit reached for this console. Try again in ${Math.ceil(
+          total.retryAfterSec / 60
+        )} min.`,
+      },
+      { status: 429, headers: { "Retry-After": String(total.retryAfterSec) } }
+    );
+  }
+  return null;
+}
 
 /**
  * Send the SIM a 6-digit code, picking the right endpoint for the number.
@@ -70,6 +128,17 @@ export async function POST(req: NextRequest) {
       lastOtpAt.delete(msisdn);
     }
 
+    const overBudget = smsBudget(msisdn, true);
+    if (overBudget) return overBudget;
+
+    // Spends the reservation, then dispatches. Charging at the point of sending
+    // rather than on a successful reply means a send that fails somewhere inside
+    // Mytel still costs budget — the SMS may well have gone out regardless.
+    const send = async (dispatch: () => Promise<OtpAttempt>) => {
+      smsBudget(msisdn, false);
+      return finish(msisdn, await dispatch());
+    };
+
     let state;
     let checkError: string | null = null;
     try {
@@ -104,17 +173,17 @@ export async function POST(req: NextRequest) {
     // A second SMS would invalidate the first OTP on Mytel's side, causing
     // "enter first code -> Unauthorized, second code works" bug.
     if (state.kind === "verified") {
-      return finish(msisdn, await sendLoginOtp(msisdn));
+      return send(() => sendLoginOtp(msisdn));
     }
     if (state.kind === "missing" || state.kind === "unverified") {
-      return finish(msisdn, await sendRegisterOtp(msisdn));
+      return send(() => sendRegisterOtp(msisdn));
     }
 
     // Inconclusive (unknown) — default to login (95% of SIMs are existing accounts).
     // If this was actually a fresh number, login will fail with a clear message and
     // the user can retry; the retry will re-check account and likely route correctly.
     // Never auto-try register here — that would send 2 SMS and invalidate the first.
-    return finish(msisdn, await sendLoginOtp(msisdn));
+    return send(() => sendLoginOtp(msisdn));
   } finally {
     inFlight.delete(msisdn);
   }

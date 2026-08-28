@@ -73,6 +73,40 @@ fly sftp get /app/data/dashboard.db-shm data/dashboard.db-shm
 - In **dev** (`npm run dev`) the console stays open unless you set
   `AUTH_PASSWORD` locally.
 - Log out from the top bar; sessions last 7 days.
+- The login endpoint is budgeted, since middleware has to let it through:
+  10 failed attempts per IP and 60 overall per 15 minutes. A correct password
+  clears its own IP's count. Both windows are in-memory, so they reset on deploy.
+
+### Rate limits and other tunables
+
+All optional — the defaults suit a single operator on one machine.
+
+| Variable | Default | What it caps |
+|---|---|---|
+| `LOGIN_MAX_ATTEMPTS` | 10 | Failed console logins per IP per 15 min |
+| `LOGIN_MAX_ATTEMPTS_GLOBAL` | 60 | Failed console logins overall per 15 min |
+| `OTP_HOURLY_LIMIT` | 30 | SMS codes this console sends per hour, all numbers |
+| `OTP_DAILY_PER_NUMBER` | 10 | SMS codes sent to any one number per day |
+| `TOKEN_ENC_KEY` | `AUTH_SECRET` | Key material for encrypting stored SIM tokens |
+| `MYTEL_PROXY_URL` | — | Proxy for outbound Mytel calls (also reads `HTTPS_PROXY`) |
+| `MYTEL_TIMEOUT_MS` | 20000 | Per-request timeout against the Mytel API |
+
+Each OTP request puts a real SMS on Mytel's network, which is why there is a
+ceiling on the total and not just the 45s per-number cooldown: without one, a
+session is free to walk through unlimited numbers at one SMS each.
+
+### Token encryption at rest
+
+`access_token` and `refresh_token` are stored AES-256-GCM encrypted
+(`src/lib/crypto.ts`), so the database file — or one of the backups — is not on
+its own enough to spend a SIM's balance. Rows written before this was added are
+encrypted on the next start.
+
+The key derives from `TOKEN_ENC_KEY`, falling back to `AUTH_SECRET`. **Rotating
+that secret makes existing tokens unreadable** and every SIM has to be logged in
+again; the affected SIMs simply show as logged out rather than failing loudly.
+Set `TOKEN_ENC_KEY` separately if you want to rotate the session secret without
+that cost.
 
 ### Notes
 
@@ -108,7 +142,8 @@ fly sftp get /app/data/dashboard.db-shm data/dashboard.db-shm
 ## Data
 
 SQLite database at `data/dashboard.db` (auto-created). Stores SIM tokens and
-transfer history. **Tokens are sensitive — keep this folder private.**
+transfer history. The tokens are encrypted (see above), but the file still
+identifies every SIM and receiver — **keep this folder private.**
 
 ## Logging in a SIM
 

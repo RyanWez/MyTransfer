@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import { sse } from "./events";
 import { phoneSearchKeys } from "./format";
+import { decryptSecret, encryptSecret, isEncrypted } from "./crypto";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -90,6 +91,23 @@ const TRANSFER_COLUMNS =
   "id, sender_phone, receiver_phone, amount, fee, status, error_code, message, created_at";
 
 const now = () => Math.floor(Date.now() / 1000);
+
+// ---- Token encryption at rest ----------------------------------------------
+//
+// The two token columns are the only secrets in the file, and they are wrapped and
+// unwrapped here rather than at the call sites: every read of a SIM goes through
+// one of the three accessors below, so callers keep seeing plain tokens and cannot
+// forget to decrypt one. See lib/crypto.ts for the format and key derivation.
+
+const ENCRYPTED_SIM_COLUMNS = ["access_token", "refresh_token"] as const;
+
+/** Hand a SIM row to the rest of the app with its tokens usable. */
+function decodeSim<T extends SimRow | undefined>(row: T): T {
+  if (!row) return row;
+  row.access_token = decryptSecret(row.access_token);
+  row.refresh_token = decryptSecret(row.refresh_token);
+  return row;
+}
 
 // ---- Filtered listing (History) --------------------------------------------
 
@@ -279,6 +297,39 @@ const stmtActiveTotalBalance = db.prepare(
   "SELECT COALESCE(SUM(balance),0) c FROM sims WHERE status = 'active'"
 );
 
+/**
+ * One-time pass to wrap tokens that predate encryption.
+ *
+ * Deliberately eager rather than waiting for each SIM's next write: a tray that is
+ * only read from would keep its plaintext tokens indefinitely. `updated_at` is left
+ * alone so the tray does not reshuffle itself on the first boot after deploying.
+ */
+function encryptLegacyTokens() {
+  const rows = db
+    .prepare(
+      `SELECT id, access_token, refresh_token FROM sims
+       WHERE access_token IS NOT NULL OR refresh_token IS NOT NULL`
+    )
+    .all() as Pick<SimRow, "id" | "access_token" | "refresh_token">[];
+
+  const pending = rows.filter((r) =>
+    ENCRYPTED_SIM_COLUMNS.some((c) => r[c] && !isEncrypted(r[c]!))
+  );
+  if (!pending.length) return;
+
+  const update = db.prepare(
+    "UPDATE sims SET access_token = ?, refresh_token = ? WHERE id = ?"
+  );
+  db.transaction(() => {
+    for (const row of pending) {
+      update.run(encryptSecret(row.access_token), encryptSecret(row.refresh_token), row.id);
+    }
+  })();
+  console.log(`[db] Encrypted stored tokens for ${pending.length} SIM(s).`);
+}
+
+encryptLegacyTokens();
+
 // Re-exported so server code has one import for both the DB and the limit; the
 // constant itself lives in lib/constants.ts because client components need it too
 // and must not pull better-sqlite3 into the browser bundle.
@@ -290,15 +341,15 @@ export const dbApi = {
   },
 
   listSims(): SimRow[] {
-    return stmtListSims.all() as SimRow[];
+    return (stmtListSims.all() as SimRow[]).map(decodeSim);
   },
 
   getSim(phone: string): SimRow | undefined {
-    return stmtGetSim.get(phone) as SimRow | undefined;
+    return decodeSim(stmtGetSim.get(phone) as SimRow | undefined);
   },
 
   getSimById(id: number): SimRow | undefined {
-    return stmtGetSimById.get(id) as SimRow | undefined;
+    return decodeSim(stmtGetSimById.get(id) as SimRow | undefined);
   },
 
   upsertSim(phone: string, fields: Partial<SimRow>): SimRow {
@@ -311,7 +362,12 @@ export const dbApi = {
     for (const [k, v] of Object.entries(fields)) {
       if (k === "phone" || k === "id") continue;
       sets.push(`${k} = ?`);
-      vals.push(v);
+      // Callers pass tokens in the clear; they are never written that way.
+      vals.push(
+        ENCRYPTED_SIM_COLUMNS.includes(k as (typeof ENCRYPTED_SIM_COLUMNS)[number])
+          ? encryptSecret(v as string | null)
+          : v
+      );
     }
     if (sets.length) {
       sets.push("updated_at = ?");
