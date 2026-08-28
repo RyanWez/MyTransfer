@@ -85,16 +85,14 @@ All optional — the defaults suit a single operator on one machine.
 |---|---|---|
 | `LOGIN_MAX_ATTEMPTS` | 10 | Failed console logins per IP per 15 min |
 | `LOGIN_MAX_ATTEMPTS_GLOBAL` | 60 | Failed console logins overall per 15 min |
-| `OTP_HOURLY_LIMIT` | 30 | SMS codes this console sends per hour, all numbers |
-| `OTP_DAILY_PER_NUMBER` | 10 | SMS codes sent to any one number per day |
 | `TOKEN_ENC_KEY` | `AUTH_SECRET` | Key material for encrypting stored SIM tokens |
 | `MYTEL_PROXY_URL` | — | Proxy for outbound Mytel calls (also reads `HTTPS_PROXY`) |
 | `MYTEL_TIMEOUT_MS` | 20000 | Per-request timeout against the Mytel API |
 | `MYTEL_CLIENT_SECRET` | — | Keycloak client secret from MyID.apk (`eu/c.java`); required for token refresh |
 
-Each OTP request puts a real SMS on Mytel's network, which is why there is a
-ceiling on the total and not just the 45s per-number cooldown: without one, a
-session is free to walk through unlimited numbers at one SMS each.
+OTP sending is deliberately uncapped — this is a single-operator console, and the
+only guard left is the 45s per-number cooldown, which exists to stop a refresh or
+double-click from sending two SMS and invalidating the first code.
 
 ### Token encryption at rest
 
