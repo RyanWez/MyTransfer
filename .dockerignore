@@ -12,3 +12,5 @@ data/
 tsconfig.tsbuildinfo
 README.md
 .claude/
+# 40MB of tunnel client that the image never runs — keeps it out of the context upload
+cloudflared
