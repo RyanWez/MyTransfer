@@ -425,14 +425,6 @@ export default function HistoryPage() {
         </span>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <DateRangePicker
-            value={dateRange}
-            onChange={(r) => {
-              setDateRange(r);
-              setPage(1);
-            }}
-          />
-
           <div className="relative w-40 sm:w-56">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-faint" />
             <input
@@ -463,6 +455,16 @@ export default function HistoryPage() {
               </button>
             ) : null}
           </div>
+
+          {/* Sits after the search box so its panel opens back across the content
+              rather than out over the sidebar. */}
+          <DateRangePicker
+            value={dateRange}
+            onChange={(r) => {
+              setDateRange(r);
+              setPage(1);
+            }}
+          />
 
           <SegmentedControl
             aria-label="Filter transfers"

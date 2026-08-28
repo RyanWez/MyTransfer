@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -20,8 +21,15 @@ export interface DateRangePickerProps {
   value: DateRange;
   onChange: (range: DateRange) => void;
   className?: string;
+  /** Preferred edge to line the panel up with; it flips when there's no room. */
   align?: "left" | "right";
 }
+
+/** Gap between the trigger and the panel, and the least space kept at any edge. */
+const PANEL_GAP = 6;
+const VIEWPORT_MARGIN = 8;
+/** Below this much room the panel drops to a single month rather than overflowing. */
+const DUAL_MONTH_MIN_WIDTH = 620;
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTHS = [
@@ -122,6 +130,8 @@ export function DateRangePicker({
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   // Reference date for view (left month)
   const initialDate = value.from ? new Date(value.from * 1000) : new Date();
@@ -132,6 +142,100 @@ export function DateRangePicker({
   const [pendingFrom, setPendingFrom] = useState<number | null>(value.from);
   const [pendingTo, setPendingTo] = useState<number | null>(value.to);
   const [hoverTs, setHoverTs] = useState<number | null>(null);
+
+  /**
+   * The panel is portalled to the body and placed by hand.
+   *
+   * Anchoring it with `right-0` inside the page put a ~600px dual-month panel
+   * wherever the trigger happened to sit: in the History header the trigger is
+   * mid-row, so the panel started at x=-97 — half of it off the left of the
+   * window and behind the sidebar, which shares its z-index. Portalling escapes
+   * every ancestor stacking context and clip, and the measurements below flip the
+   * panel to the trigger's other edge before shifting it inside the viewport, so
+   * it can't leave the screen no matter where the trigger is.
+   */
+  const [mounted, setMounted] = useState(false);
+  const [placement, setPlacement] = useState<{
+    left: number;
+    top: number;
+    /** Room the panel is allowed to take, so it never has to overflow. */
+    available: number;
+  } | null>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  /**
+   * Space the panel may occupy: the trigger's scroll container, clamped to the
+   * window. Measured rather than assumed from a breakpoint, because the sidebar
+   * takes 240px out of the row at exactly the widths where a dual-month panel
+   * stops fitting.
+   */
+  const measureBounds = useCallback((trigger: HTMLElement) => {
+    const content = trigger.closest("main")?.getBoundingClientRect();
+    const minLeft = Math.max(VIEWPORT_MARGIN, (content?.left ?? 0) + VIEWPORT_MARGIN);
+    const maxRight = Math.min(
+      window.innerWidth - VIEWPORT_MARGIN,
+      (content?.right ?? window.innerWidth) - VIEWPORT_MARGIN
+    );
+    return { minLeft, maxRight, available: Math.max(0, maxRight - minLeft) };
+  }, []);
+
+  const updatePlacement = useCallback(() => {
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+
+    const anchor = trigger.getBoundingClientRect();
+    const { minLeft, maxRight, available } = measureBounds(trigger);
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+
+    // Preferred edge first, the opposite edge if that would overflow, then a
+    // plain clamp so a panel wider than its container still starts in bounds.
+    let left = align === "right" ? anchor.right - width : anchor.left;
+    if (left < minLeft || left + width > maxRight) {
+      const flipped = align === "right" ? anchor.left : anchor.right - width;
+      if (flipped >= minLeft && flipped + width <= maxRight) left = flipped;
+    }
+    left = Math.max(minLeft, Math.min(left, Math.max(minLeft, maxRight - width)));
+
+    // Below the trigger unless the space above is genuinely roomier.
+    const below = anchor.bottom + PANEL_GAP;
+    const fitsBelow = below + height <= window.innerHeight - VIEWPORT_MARGIN;
+    const above = anchor.top - PANEL_GAP - height;
+    const top = fitsBelow || above < VIEWPORT_MARGIN ? below : above;
+
+    setPlacement({ left, top, available });
+  }, [align, measureBounds]);
+
+  /**
+   * Two months need roughly 600px. Below that the panel shows one, so a narrow
+   * container gets a smaller panel rather than one that hangs off the edge.
+   * Measured before the first paint so the panel is never laid out at the wrong
+   * size and then corrected.
+   */
+  const [available, setAvailable] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    setAvailable(measureBounds(triggerRef.current).available);
+  }, [open, measureBounds]);
+  const dualMonth = (placement?.available ?? available ?? 0) >= DUAL_MONTH_MIN_WIDTH;
+
+  // Measure once the panel exists, then keep up with scrolling and resizing.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement(null);
+      return;
+    }
+    updatePlacement();
+    window.addEventListener("resize", updatePlacement);
+    // Capture phase: the page may scroll inside a container, not just the window.
+    window.addEventListener("scroll", updatePlacement, true);
+    return () => {
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [open, updatePlacement]);
 
   // Sync state when opened
   useEffect(() => {
@@ -145,18 +249,29 @@ export function DateRangePicker({
     }
   }, [open, value]);
 
-  // Click outside to close
+  // Click outside to close. The panel is no longer a descendant of the trigger's
+  // container, so it has to be checked separately or picking a date would close.
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    if (!open) return;
+
+    function handlePointerDown(e: MouseEvent) {
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
         setOpen(false);
+        triggerRef.current?.focus();
       }
     }
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);
 
@@ -259,12 +374,23 @@ export function DateRangePicker({
   const effectiveStart = currentStart !== null && currentEnd !== null ? Math.min(currentStart, currentEnd) : currentStart;
   const effectiveEnd = currentStart !== null && currentEnd !== null ? Math.max(currentStart, currentEnd) : null;
 
-  function renderMonth(grid: ReturnType<typeof generateMonthDays>, isLeft: boolean) {
+  /**
+   * `nav` says which arrows this month carries. Side by side they split them —
+   * back on the left month, forward on the right — but a single-month panel needs
+   * both, or a narrow window could only ever move forwards.
+   */
+  function renderMonth(
+    grid: ReturnType<typeof generateMonthDays>,
+    nav: "back" | "forward" | "both"
+  ) {
+    const showBack = nav === "back" || nav === "both";
+    const showForward = nav === "forward" || nav === "both";
+
     return (
-      <div className="w-64 select-none">
+      <div className="w-64 shrink-0 select-none">
         {/* Month Header */}
         <div className="flex items-center justify-between pb-3 text-xs">
-          {isLeft ? (
+          {showBack ? (
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -289,7 +415,7 @@ export function DateRangePicker({
             {MONTHS[grid.month]} {grid.year}
           </div>
 
-          {!isLeft ? (
+          {showForward ? (
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -354,8 +480,11 @@ export function DateRangePicker({
     <div ref={containerRef} className={cn("relative inline-block text-left", className)}>
       {/* Trigger Button */}
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className={cn(
           "flex h-8 items-center gap-2.5 rounded border border-hairline bg-card px-3 font-mono text-xs text-ink transition-all hover:border-hairline-strong focus:outline-none focus:border-brass focus:ring-1 focus:ring-brass",
           open && "border-brass ring-1 ring-brass"
@@ -375,14 +504,24 @@ export function DateRangePicker({
         <CalendarIcon className="h-3.5 w-3.5 text-ink-faint ml-1" />
       </button>
 
-      {/* Popover Dropdown */}
-      {open && (
-        <div
-          className={cn(
-            "absolute z-50 mt-1.5 w-[min(320px,calc(100vw-2.5rem))] overflow-hidden rounded-lg border border-hairline bg-card p-4 shadow-2xl animate-rise-in sm:w-auto sm:min-w-[320px]",
-            align === "right" ? "right-0" : "left-0"
-          )}
-        >
+      {/* Panel — portalled to the body so no ancestor can clip it or paint over it. */}
+      {open &&
+        mounted &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="dialog"
+            aria-label="Choose a date range"
+            style={{
+              left: placement?.left ?? 0,
+              top: placement?.top ?? 0,
+              maxWidth: placement?.available ?? available ?? undefined,
+              // Hidden for the frame before the measurement lands, so it never
+              // flashes at the top-left corner on the way to its real place.
+              visibility: placement ? "visible" : "hidden",
+            }}
+            className="fixed z-[60] max-h-[calc(100vh-1rem)] overflow-auto rounded-lg border border-hairline bg-card p-4 shadow-2xl animate-rise-in"
+          >
           {/* Quick Presets Bar */}
           <div className="flex flex-wrap items-center gap-1.5 pb-3.5 mb-3.5 border-b border-hairline">
             {[
@@ -404,17 +543,20 @@ export function DateRangePicker({
             ))}
           </div>
 
-          {/* Dual Month Calendar View */}
-          <div className="flex flex-col sm:flex-row gap-6">
-            {renderMonth(leftMonthGrid, true)}
-            <div className="hidden sm:block border-r border-hairline" />
-            <div className="hidden sm:block">
-              {renderMonth(rightMonthGrid, false)}
-            </div>
+          {/* One month or two, decided by measured room rather than a breakpoint —
+              the sidebar eats 240px at exactly the widths where two stop fitting. */}
+          <div className="flex gap-6">
+            {renderMonth(leftMonthGrid, dualMonth ? "back" : "both")}
+            {dualMonth && (
+              <>
+                <div className="border-r border-hairline" />
+                {renderMonth(rightMonthGrid, "forward")}
+              </>
+            )}
           </div>
 
           {/* Footer with display and clear/close */}
-          <div className="mt-4 pt-3 border-t border-hairline flex items-center justify-between gap-2 text-xs">
+          <div className="mt-4 pt-3 border-t border-hairline flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2 font-mono text-ink-soft bg-substrate px-2.5 py-1 rounded border border-hairline">
               <span>{pendingFrom ? formatTimestampToStr(pendingFrom) : "Start date"}</span>
               <span className="text-ink-mute">→</span>
@@ -441,8 +583,9 @@ export function DateRangePicker({
               </button>
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

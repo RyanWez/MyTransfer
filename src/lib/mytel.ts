@@ -24,7 +24,9 @@ const DEVICE = {
 const DEVICE_BRAND = "samsung";
 
 const CLIENT_ID = "superapp-client";
-const CLIENT_SECRET = "a2d5a415-1c9f-421d-84d4-5f6e0e814752";
+// Keycloak client secret extracted from MyID.apk (eu/c.java). Kept out of the
+// repo — set MYTEL_CLIENT_SECRET, see README.
+const CLIENT_SECRET = process.env.MYTEL_CLIENT_SECRET;
 
 export interface LoginResult {
   access_token: string;
@@ -321,6 +323,10 @@ export async function loginWithPassword(
 export async function refreshAccessToken(
   refreshToken: string
 ): Promise<LoginResult | null> {
+  if (!CLIENT_SECRET) {
+    console.error("[mytel] MYTEL_CLIENT_SECRET is not set; cannot refresh tokens");
+    return null;
+  }
   const form = new URLSearchParams({
     grant_type: "refresh_token",
     client_id: CLIENT_ID,

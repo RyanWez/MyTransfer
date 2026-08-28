@@ -90,6 +90,7 @@ All optional — the defaults suit a single operator on one machine.
 | `TOKEN_ENC_KEY` | `AUTH_SECRET` | Key material for encrypting stored SIM tokens |
 | `MYTEL_PROXY_URL` | — | Proxy for outbound Mytel calls (also reads `HTTPS_PROXY`) |
 | `MYTEL_TIMEOUT_MS` | 20000 | Per-request timeout against the Mytel API |
+| `MYTEL_CLIENT_SECRET` | — | Keycloak client secret from MyID.apk (`eu/c.java`); required for token refresh |
 
 Each OTP request puts a real SMS on Mytel's network, which is why there is a
 ceiling on the total and not just the 45s per-number cooldown: without one, a
