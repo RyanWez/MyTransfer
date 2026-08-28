@@ -410,6 +410,7 @@ export async function getBalance(
   msisdn: string
 ): Promise<BalanceInfo | null> {
   const res = await fetchWithTimeout(`${API_BASE}/account-detail/api/v1.2/individual/account-main`, {
+    method: "GET",
     headers: headers(token),
     query: { isdn: requireDigits("msisdn", msisdn), language: "EN" },
   });
