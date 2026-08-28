@@ -5,10 +5,8 @@ import { normalizeMsisdn } from "@/lib/mytel";
 export async function GET() {
   const volumeToday = dbApi.todayVolumeBySender();
   const volumeThisMonth = dbApi.thisMonthVolumeBySender();
-  const sims = dbApi.listSims().map((s) => ({
+  const sims = dbApi.listSimsPublic().map((s) => ({
     ...s,
-    access_token: undefined,
-    refresh_token: undefined,
     volume_today: volumeToday[s.phone] ?? 0,
     volume_this_month: volumeThisMonth[s.phone] ?? 0,
   }));
@@ -23,8 +21,8 @@ export async function DELETE(req: NextRequest) {
 
   if (targets.length === 0) return NextResponse.json({ ok: false }, { status: 400 });
 
-  for (const p of targets) {
-    dbApi.deleteSim(normalizeMsisdn(p));
-  }
-  return NextResponse.json({ ok: true });
+  // One transaction and one live push for the whole batch — clearing out drained
+  // SIMs would otherwise wake every open tab once per row.
+  const removed = dbApi.deleteSims(targets.map((p) => normalizeMsisdn(p)));
+  return NextResponse.json({ ok: true, removed });
 }

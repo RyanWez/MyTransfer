@@ -90,6 +90,24 @@ export interface TransferRow {
 const TRANSFER_COLUMNS =
   "id, sender_phone, receiver_phone, amount, fee, status, error_code, message, created_at";
 
+/**
+ * The SIM columns the browser is allowed to see — everything except the two
+ * token columns.
+ *
+ * `/api/sims` returns the whole tray on first paint and again on every live
+ * push, and it used to read `SELECT *` and then AES-GCM-decrypt both tokens per
+ * row purely to overwrite them with `undefined` before serialising. At 200+ SIMs
+ * that is 400+ pointless decryptions per request on a shared-cpu-1x VM. Leaving
+ * the ciphertext in the file and never selecting it is both cheaper and one less
+ * way for a token to reach a response body.
+ */
+const PUBLIC_SIM_COLUMNS =
+  "id, phone, token_expires_at, refresh_expires_at, subscription_id, balance, " +
+  "balance_checked_at, status, note, created_at, updated_at";
+
+/** A SIM as the API hands it to the browser: no tokens, ever. */
+export type PublicSimRow = Omit<SimRow, "access_token" | "refresh_token">;
+
 const now = () => Math.floor(Date.now() / 1000);
 
 // ---- Token encryption at rest ----------------------------------------------
@@ -222,7 +240,9 @@ function stepBucket(d: Date, granularity: Granularity) {
 }
 
 // Pre-compiled prepared statements for hot queries to avoid repeated SQL AST compilation
-const stmtListSims = db.prepare("SELECT * FROM sims ORDER BY updated_at DESC");
+const stmtListSimsPublic = db.prepare(
+  `SELECT ${PUBLIC_SIM_COLUMNS} FROM sims ORDER BY updated_at DESC`
+);
 const stmtGetSim = db.prepare("SELECT * FROM sims WHERE phone = ?");
 const stmtGetSimById = db.prepare("SELECT * FROM sims WHERE id = ?");
 const stmtInsertSim = db.prepare("INSERT INTO sims (phone) VALUES (?)");
@@ -374,8 +394,12 @@ export const dbApi = {
     return stmtGetTransferById.get(id) as TransferRow | undefined;
   },
 
-  listSims(): SimRow[] {
-    return (stmtListSims.all() as SimRow[]).map(decodeSim);
+  /**
+   * The tray as the browser sees it. Tokens are excluded in SQL rather than
+   * stripped afterwards, so nothing decrypts and nothing can leak by omission.
+   */
+  listSimsPublic(): PublicSimRow[] {
+    return stmtListSimsPublic.all() as PublicSimRow[];
   },
 
   getSim(phone: string): SimRow | undefined {
@@ -413,9 +437,25 @@ export const dbApi = {
     return this.getSim(phone)!;
   },
 
-  deleteSim(phone: string) {
-    stmtDeleteSim.run(phone);
-    sse.emit("update");
+  /**
+   * Drop one or more SIMs in a single transaction and announce it once.
+   *
+   * Clearing out drained SIMs is a tens-of-rows operation, and deleting them one
+   * call at a time fired one SSE push per row — every open tab then refetched the
+   * whole tray dozens of times over for a single click. One statement per row is
+   * unavoidable; one broadcast for the batch is not.
+   *
+   * Returns how many rows actually went, so a stale phone in the list is
+   * reported rather than counted.
+   */
+  deleteSims(phones: string[]): number {
+    if (phones.length === 0) return 0;
+    let removed = 0;
+    db.transaction(() => {
+      for (const phone of phones) removed += stmtDeleteSim.run(phone).changes;
+    })();
+    if (removed > 0) sse.emit("update");
+    return removed;
   },
 
   /**

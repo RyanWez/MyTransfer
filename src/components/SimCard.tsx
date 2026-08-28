@@ -27,8 +27,11 @@ export interface SimCardProps {
 /**
  * A SIM as a physical object: notched top-right corner, an LED for reachability,
  * balance in brass, and its access token's remaining life along the bottom.
+ *
+ * Memoised: the tray keeps its handlers and stagger styles referentially stable,
+ * so typing in the search box re-renders the page shell and not two dozen cards.
  */
-function SimCard({
+const SimCard = React.memo(function SimCard({
   sim,
   onRefresh,
   onRemove,
@@ -157,7 +160,7 @@ function SimCard({
       </div>
     </Panel>
   );
-}
+});
 
 export interface SimChipProps {
   sim: Sim;

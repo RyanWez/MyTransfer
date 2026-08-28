@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, ChevronRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
+import { ArrowRight, Copy, Download, ScrollText, Search, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBanner, ErrorState } from "@/components/ui/ErrorState";
+import { Pagination } from "@/components/ui/Pagination";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
@@ -53,19 +54,6 @@ function getInitialTodayRange(): DateRange {
   const from = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0).getTime() / 1000);
   const to = Math.floor(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999).getTime() / 1000);
   return { from, to };
-}
-
-function getPaginationRange(current: number, total: number): (number | "...")[] {
-  if (total <= 7) {
-    return Array.from({ length: total }, (_, i) => i + 1);
-  }
-  if (current <= 4) {
-    return [1, 2, 3, 4, 5, "...", total];
-  }
-  if (current >= total - 3) {
-    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
-  }
-  return [1, "...", current - 1, current, current + 1, "...", total];
 }
 
 function HistorySkeleton() {
@@ -666,64 +654,15 @@ export default function HistoryPage() {
         </div>
 
         {/* Pagination Controls */}
-        {total > 0 && (
-          <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-5 sm:flex-row">
-            <span className="whitespace-nowrap font-mono text-eyebrow uppercase tnum text-ink-mute">
-              Showing {(currentPage - 1) * PAGE_SIZE + 1}–
-              {Math.min(currentPage * PAGE_SIZE, total)} of {fmtAmount(total)} transfers
-            </span>
-
-            {pageCount > 1 && (
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="secondary"
-                  size="icon-sm"
-                  disabled={currentPage <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  aria-label="Previous page"
-                  title="Previous page"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-
-                <div className="flex items-center gap-1">
-                  {getPaginationRange(currentPage, pageCount).map((p, idx) =>
-                    p === "..." ? (
-                      <span key={`ellipsis-${idx}`} className="px-1.5 font-mono text-xs text-ink-faint">
-                        …
-                      </span>
-                    ) : (
-                      <button
-                        key={`page-${p}`}
-                        type="button"
-                        onClick={() => setPage(p)}
-                        className={cn(
-                          "h-8 min-w-[2rem] rounded px-2 font-mono text-xs font-medium transition-colors",
-                          currentPage === p
-                            ? "bg-ink text-substrate shadow-sm"
-                            : "border border-hairline bg-card text-ink hover:border-hairline-strong hover:bg-substrate"
-                        )}
-                      >
-                        {p}
-                      </button>
-                    )
-                  )}
-                </div>
-
-                <Button
-                  variant="secondary"
-                  size="icon-sm"
-                  disabled={currentPage >= pageCount}
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                  aria-label="Next page"
-                  title="Next page"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          pageCount={pageCount}
+          pageSize={PAGE_SIZE}
+          totalItems={total}
+          onPageChange={setPage}
+          noun={["transfer", "transfers"]}
+          className="pt-5"
+        />
       </div>
 
       {/* Delete Confirmation */}

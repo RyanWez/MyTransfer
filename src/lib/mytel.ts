@@ -96,10 +96,19 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.MYTEL_TIMEOUT_MS) || 20000;
 // can point this client at an arbitrary host.
 const ALLOWED_HOSTS = new Set(["apis.mytel.com.mm", "id.mytel.com.mm"]);
 
-/** Fetch with proxy dispatcher and built-in timeout to prevent server thread blocking when Mytel API hangs. */
+/**
+ * Fetch with proxy dispatcher and built-in timeout to prevent server thread
+ * blocking when Mytel API hangs.
+ *
+ * `url` is always a literal endpoint built from the pinned bases above, and
+ * per-request values go in `query` rather than being spliced into the string by
+ * the caller. The allowlist therefore runs against a URL no caller assembled,
+ * and the query is appended to an already-approved origin — a request value can
+ * only ever end up in the query string, never in the scheme, host or path.
+ */
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit = {},
+  options: RequestInit & { query?: Record<string, string> } = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
   const target = new URL(url);
@@ -107,17 +116,25 @@ async function fetchWithTimeout(
     throw new Error(`[mytel] Refusing to fetch non-allowlisted URL: ${target.protocol}//${target.hostname}`);
   }
 
+  const { query, ...init } = options;
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      target.searchParams.set(key, value);
+    }
+  }
+  const requestUrl = target.toString();
+
   const controller = new AbortController();
   const timer = setTimeout(() => {
-    controller.abort(new Error(`Request timeout after ${timeoutMs}ms: ${url}`));
+    controller.abort(new Error(`Request timeout after ${timeoutMs}ms: ${requestUrl}`));
   }, timeoutMs);
 
-  if (options.signal) {
-    options.signal.addEventListener("abort", () => controller.abort(options.signal?.reason));
+  if (init.signal) {
+    init.signal.addEventListener("abort", () => controller.abort(init.signal?.reason));
   }
 
   const fetchOptions: any = {
-    ...options,
+    ...init,
     signal: controller.signal,
   };
 
@@ -127,7 +144,7 @@ async function fetchWithTimeout(
   }
 
   try {
-    const res = await fetch(url, fetchOptions);
+    const res = await fetch(requestUrl, fetchOptions);
     return res;
   } catch (error: any) {
     if (error.name === "AbortError" || controller.signal.aborted) {
@@ -215,9 +232,11 @@ export type AccountState =
 
 /** `GET v2/login/action/check-account` — does this number have a usable MyID account? */
 export async function checkAccount(phone: string): Promise<AccountState> {
-  const url = new URL(`${AUTH_BASE}v2/login/action/check-account`);
-  url.searchParams.set("phoneNumber", requireDigits("phone", phone));
-  const res = await fetchWithTimeout(url.toString(), { method: "GET", headers: headers() });
+  const res = await fetchWithTimeout(`${AUTH_BASE}v2/login/action/check-account`, {
+    method: "GET",
+    headers: headers(),
+    query: { phoneNumber: requireDigits("phone", phone) },
+  });
   const text = await res.text();
 
   let data: ApiResult<{ id?: string; myid?: string; verify?: boolean }> | null = null;
@@ -309,9 +328,11 @@ export async function confirmRegister(
 
 /** Step 1 of OTP login: ask Mytel to SMS a 6-digit OTP to the SIM. */
 export async function requestLoginOtp(phone: string): Promise<ApiResult> {
-  const url = new URL(`${AUTH_BASE}login/method/otp/get-otp`);
-  url.searchParams.set("phoneNumber", requireDigits("phone", phone));
-  const res = await fetchWithTimeout(url.toString(), { method: "GET", headers: headers() });
+  const res = await fetchWithTimeout(`${AUTH_BASE}login/method/otp/get-otp`, {
+    method: "GET",
+    headers: headers(),
+    query: { phoneNumber: requireDigits("phone", phone) },
+  });
   return json<ApiResult>(res);
 }
 
@@ -388,10 +409,10 @@ export async function getBalance(
   token: string,
   msisdn: string
 ): Promise<BalanceInfo | null> {
-  const url = new URL(`${API_BASE}/account-detail/api/v1.2/individual/account-main`);
-  url.searchParams.set("isdn", requireDigits("msisdn", msisdn));
-  url.searchParams.set("language", "EN");
-  const res = await fetchWithTimeout(url.toString(), { headers: headers(token) });
+  const res = await fetchWithTimeout(`${API_BASE}/account-detail/api/v1.2/individual/account-main`, {
+    headers: headers(token),
+    query: { isdn: requireDigits("msisdn", msisdn), language: "EN" },
+  });
   const data = await json<ApiResult<unknown>>(res);
   if (data.errorCode !== 0) return null;
   // Response shape: result: [ { msisdn, subId, mainBalance: { main: { amount } } } ]

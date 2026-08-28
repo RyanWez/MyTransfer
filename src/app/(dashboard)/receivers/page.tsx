@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, ChevronDown, ChevronLeft, ChevronRight, Copy, SlidersHorizontal, X } from "lucide-react";
+import { Search, ChevronDown, Copy, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorBanner, ErrorState } from "@/components/ui/ErrorState";
+import { Pagination } from "@/components/ui/Pagination";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DateRangePicker, type DateRange } from "@/components/ui/DateRangePicker";
 import { fmtAmount, fmtClock, fmtPhone, fmtPhoneGrouped, phoneSearchKeys } from "@/lib/format";
@@ -57,19 +58,6 @@ const LIST_VIEWPORT = "max-h-[max(360px,calc(100vh-288px))]";
 const TRANSFERS_VIEWPORT = "max-h-[350px]";
 
 type SortKey = "volume" | "count" | "recent";
-
-function getPaginationRange(current: number, total: number): (number | "...")[] {
-  if (total <= 7) {
-    return Array.from({ length: total }, (_, i) => i + 1);
-  }
-  if (current <= 4) {
-    return [1, 2, 3, 4, 5, "...", total];
-  }
-  if (current >= total - 3) {
-    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
-  }
-  return [1, "...", current - 1, current, current + 1, "...", total];
-}
 
 type GroupedReceiver = ReceiverGroup;
 
@@ -560,82 +548,13 @@ export default function ReceiversPage() {
 
             <Pagination
               currentPage={currentPage}
-              totalPages={totalPages}
+              pageCount={totalPages}
+              pageSize={PAGE_SIZE}
               totalItems={grouped.length}
               onPageChange={setPage}
+              noun={["receiver", "receivers"]}
             />
           </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Pagination({
-  currentPage,
-  totalPages,
-  totalItems,
-  onPageChange,
-}: {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  onPageChange: (page: number) => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-between gap-4 border-t border-hairline pt-4 sm:flex-row">
-      <p className="font-mono text-eyebrow uppercase tnum text-ink-mute">
-        Showing {(currentPage - 1) * PAGE_SIZE + 1}–
-        {Math.min(currentPage * PAGE_SIZE, totalItems)} of {totalItems} receivers
-      </p>
-
-      {totalPages > 1 && (
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="secondary"
-            size="icon-sm"
-            disabled={currentPage <= 1}
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-            aria-label="Previous page"
-            title="Previous page"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          <div className="flex items-center gap-1">
-            {getPaginationRange(currentPage, totalPages).map((p, idx) =>
-              p === "..." ? (
-                <span key={`ellipsis-${idx}`} className="px-1.5 font-mono text-xs text-ink-faint">
-                  …
-                </span>
-              ) : (
-                <button
-                  key={`page-${p}`}
-                  type="button"
-                  onClick={() => onPageChange(p)}
-                  className={cn(
-                    "h-8 min-w-[2rem] rounded px-2 font-mono text-xs font-medium transition-colors",
-                    currentPage === p
-                      ? "bg-ink text-substrate shadow-sm"
-                      : "border border-hairline bg-card text-ink hover:border-hairline-strong hover:bg-substrate"
-                  )}
-                >
-                  {p}
-                </button>
-              )
-            )}
-          </div>
-
-          <Button
-            variant="secondary"
-            size="icon-sm"
-            disabled={currentPage >= totalPages}
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-            aria-label="Next page"
-            title="Next page"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
         </div>
       )}
     </div>
