@@ -10,6 +10,17 @@ export async function POST(req: NextRequest) {
     if (!phone) return NextResponse.json({ ok: false }, { status: 400 });
 
     const msisdn = normalizeMsisdn(phone);
+    // Same shape check the OTP route applies. This value ends up in a Mytel
+    // query string, and while getBalance refuses anything non-numeric and an
+    // unknown number never gets past the lookup below, a request-supplied
+    // number should be rejected at the door rather than two guards deep.
+    if (!/^959\d{9}$/.test(msisdn)) {
+      return NextResponse.json(
+        { ok: false, error: "Invalid phone number" },
+        { status: 400 }
+      );
+    }
+
     const sim = dbApi.getSim(msisdn);
     if (!sim) return NextResponse.json({ ok: false, error: "SIM not found" }, { status: 404 });
 
