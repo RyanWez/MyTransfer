@@ -17,6 +17,9 @@ tsconfig.tsbuildinfo
 # Claude Code local state (machine-specific permissions and launch config)
 .claude/
 
+# Mimosa security plugin local state (hook sessions, scan artifacts)
+.mimosa/
+
 # Cloudflare tunnel client — a 40MB platform binary, not source. Download it for
 # the host that needs it: https://github.com/cloudflare/cloudflared/releases
 cloudflared
