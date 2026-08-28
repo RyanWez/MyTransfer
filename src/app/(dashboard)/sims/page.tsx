@@ -61,6 +61,11 @@ export default function SimsPage() {
   // Focused when the login dialog opens, so a number can be typed immediately.
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * `background` keeps the rendered cards in place and swaps the data underneath.
+   * Only the first load may fall back to skeletons — a balance read or a removal
+   * replacing the whole tray with six placeholders reads as the tray emptying.
+   */
   const load = useCallback(
     (background = false) => {
       if (!background) setLoaded(false);
@@ -175,7 +180,7 @@ export default function SimsPage() {
         );
         setLoginOpen(false);
         invalidateCache();
-        load();
+        load(true);
       } else {
         const msg = r.message || r.error || "Check the code or password and try again.";
         const isNewCode =
@@ -227,7 +232,7 @@ export default function SimsPage() {
         toast.error("Couldn't read the balance", { description: r.message || r.error || undefined });
       }
       invalidateCache();
-      load();
+      load(true);
     } catch {
       toast.error("Network error", { description: "The console couldn't reach Mytel. Try again." });
     } finally {
@@ -257,7 +262,7 @@ export default function SimsPage() {
       });
       setPendingRemove(null);
       invalidateCache();
-      load();
+      load(true);
     } catch {
       toast.error("Couldn't remove the SIM", { description: "Network error — try again." });
     } finally {
@@ -283,7 +288,7 @@ export default function SimsPage() {
       setSelectionMode(false);
       setPendingBulkRemove(false);
       invalidateCache();
-      load();
+      load(true);
     } catch {
       toast.error("Couldn't remove the SIMs", { description: "Network error — try again." });
     } finally {

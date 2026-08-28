@@ -24,6 +24,7 @@ const PAGES: Record<string, { title: string; sub: string }> = {
   "/transfer": { title: "New transfer", sub: "Send balance from one SIM to any Mytel number" },
   "/sims": { title: "SIM tray", sub: "Logged-in SIMs and how long each token has left" },
   "/history": { title: "History", sub: "Every transfer this console has attempted" },
+  "/receivers": { title: "Receivers", sub: "Numbers this console has sent to, grouped by total" },
 };
 
 /** The only place a page title appears — pages start straight into content. */

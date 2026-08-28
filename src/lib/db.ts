@@ -73,12 +73,21 @@ export interface TransferRow {
   receiver_phone: string;
   amount: number;
   fee: number;
-  otp: string | null;
   status: string;
   error_code: number | null;
   message: string | null;
   created_at: number;
 }
+
+/**
+ * Every transfer row read through this module is serialised straight to the
+ * browser by /api/history and /api/stats, so the column list is explicit rather
+ * than `*`: the legacy `otp` column must never travel with it. Nothing writes
+ * that column any more either — a single-use SMS code has no value once the
+ * transfer has settled.
+ */
+const TRANSFER_COLUMNS =
+  "id, sender_phone, receiver_phone, amount, fee, status, error_code, message, created_at";
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -200,15 +209,21 @@ const stmtGetSim = db.prepare("SELECT * FROM sims WHERE phone = ?");
 const stmtGetSimById = db.prepare("SELECT * FROM sims WHERE id = ?");
 const stmtInsertSim = db.prepare("INSERT INTO sims (phone) VALUES (?)");
 const stmtDeleteSim = db.prepare("DELETE FROM sims WHERE phone = ?");
+const stmtDebitSimBalance = db.prepare(
+  `UPDATE sims SET balance = balance - ?, updated_at = ?
+   WHERE phone = ? AND balance IS NOT NULL`
+);
 
 const stmtAddTransfer = db.prepare(
-  `INSERT INTO transfers (sender_phone, receiver_phone, amount, fee, otp, status, error_code, message)
-   VALUES (@sender_phone, @receiver_phone, @amount, @fee, @otp, @status, @error_code, @message)`
+  `INSERT INTO transfers (sender_phone, receiver_phone, amount, fee, status, error_code, message)
+   VALUES (@sender_phone, @receiver_phone, @amount, @fee, @status, @error_code, @message)`
 );
-const stmtGetTransferById = db.prepare("SELECT * FROM transfers WHERE id = ?");
-const stmtListTransfers = db.prepare("SELECT * FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?");
+const stmtGetTransferById = db.prepare(`SELECT ${TRANSFER_COLUMNS} FROM transfers WHERE id = ?`);
+const stmtListTransfers = db.prepare(
+  `SELECT ${TRANSFER_COLUMNS} FROM transfers ORDER BY created_at DESC, id DESC LIMIT ?`
+);
 const stmtListTransfersRange = db.prepare(
-  "SELECT * FROM transfers WHERE created_at >= ? AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT ?"
+  `SELECT ${TRANSFER_COLUMNS} FROM transfers WHERE created_at >= ? AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT ?`
 );
 const stmtDeleteTransfer = db.prepare("DELETE FROM transfers WHERE id = ?");
 
@@ -313,18 +328,30 @@ export const dbApi = {
     sse.emit("update");
   },
 
+  /**
+   * Subtract a settled transfer from the cached balance in one statement.
+   *
+   * A transfer confirm reads the SIM before awaiting Mytel, which can take up to
+   * 20s — long enough for a balance refresh or a second transfer to land. Doing
+   * the arithmetic in SQL means the newer figure is debited, not overwritten by
+   * one derived from the pre-await snapshot. A SIM whose balance was never read
+   * (NULL) is left alone.
+   */
+  debitSimBalance(phone: string, amount: number) {
+    const info = stmtDebitSimBalance.run(amount, now(), phone);
+    if (info.changes > 0) sse.emit("update");
+  },
+
   addTransfer(t: {
     sender_phone: string;
     receiver_phone: string;
     amount: number;
     fee: number;
-    otp?: string;
     status: string;
     error_code?: number;
     message?: string;
   }): TransferRow {
     const info = stmtAddTransfer.run({
-      otp: null,
       error_code: null,
       message: null,
       ...t,
@@ -394,7 +421,7 @@ export const dbApi = {
     const { sql, args } = transfersWhereClause(f);
     const rows = db
       .prepare(
-        `SELECT * FROM transfers ${sql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
+        `SELECT ${TRANSFER_COLUMNS} FROM transfers ${sql} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
       )
       .all(...args, limit, offset) as TransferRow[];
     const total = (db

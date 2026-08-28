@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbApi } from "@/lib/db";
-import { registerMyShare, normalizeMsisdn } from "@/lib/mytel";
+import { apiOk, registerMyShare, normalizeMsisdn } from "@/lib/mytel";
 import { getValidToken } from "@/lib/tokens";
 
 // Step 2: confirm transfer with OTP.
@@ -31,12 +31,32 @@ export async function POST(req: NextRequest) {
       receiver_phone: receiver,
       amount: amt,
       fee,
-      otp,
       status: "pending",
     });
 
-    const result = await registerMyShare(ts.token, sender, receiverMsisdn, amt, otp);
-    const ok = result.errorCode === 0;
+    // Once the row exists it must always be settled. A thrown request — the 20s
+    // timeout being the common one — used to leave it `pending` forever, which
+    // both stalled the history entry and inflated the pending count.
+    let result;
+    try {
+      result = await registerMyShare(ts.token, sender, receiverMsisdn, amt, otp);
+    } catch (err: any) {
+      const message = err?.message || "Failed to reach Mytel server";
+      dbApi.updateTransfer(transfer.id, {
+        status: "failed",
+        error_code: null,
+        message,
+      });
+      return NextResponse.json(
+        { ok: false, error: message, transferId: transfer.id },
+        { status: 502 }
+      );
+    }
+
+    // Same success test as /transfer/send: the csm/* endpoints answer 0 while the
+    // rest of the app answers 2xx, and treating 2xx as a failure here marked
+    // completed transfers as failed.
+    const ok = apiOk(result.errorCode);
 
     dbApi.updateTransfer(transfer.id, {
       status: ok ? "success" : "failed",
@@ -45,10 +65,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (ok) {
-      // deduct locally-cached balance estimate
-      if (sim.balance !== null) {
-        dbApi.upsertSim(sender, { balance: sim.balance - amt - fee });
-      }
+      dbApi.debitSimBalance(sender, amt + fee);
     }
 
     return NextResponse.json({

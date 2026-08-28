@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbApi } from "@/lib/db";
-import { requestTransferOtp, normalizeMsisdn } from "@/lib/mytel";
+import { requestTransferOtp, normalizeMsisdn, apiOk } from "@/lib/mytel";
 import { getValidToken } from "@/lib/tokens";
 
 // Step 1: trigger OTP for a transfer. Body: { phone }
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await requestTransferOtp(ts.token, sim.subscription_id);
-    const ok = result.errorCode === 0 || (result.errorCode >= 200 && result.errorCode < 300);
+    const ok = apiOk(result.errorCode);
 
     return NextResponse.json({
       ok,
