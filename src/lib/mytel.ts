@@ -91,12 +91,22 @@ function proxyDispatcher(): any {
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.MYTEL_TIMEOUT_MS) || 20000;
 
+// Every outbound call goes to one of these hosts over HTTPS. fetchWithTimeout
+// refuses anything else, so no caller — and no user input that reaches a URL —
+// can point this client at an arbitrary host.
+const ALLOWED_HOSTS = new Set(["apis.mytel.com.mm", "id.mytel.com.mm"]);
+
 /** Fetch with proxy dispatcher and built-in timeout to prevent server thread blocking when Mytel API hangs. */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
+  const target = new URL(url);
+  if (target.protocol !== "https:" || !ALLOWED_HOSTS.has(target.hostname)) {
+    throw new Error(`[mytel] Refusing to fetch non-allowlisted URL: ${target.protocol}//${target.hostname}`);
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => {
     controller.abort(new Error(`Request timeout after ${timeoutMs}ms: ${url}`));
@@ -155,6 +165,18 @@ export function normalizeMsisdn(phone: string): string {
   return p;
 }
 
+/**
+ * Phone numbers that reach a Mytel URL are digits, full stop. Anything else in
+ * the value is refused rather than encoded and sent, so a phone field can never
+ * steer the request path or host.
+ */
+function requireDigits(label: string, value: string): string {
+  if (!/^\d{5,20}$/.test(value)) {
+    throw new Error(`[mytel] ${label} must be 5-20 digits, got: ${value.slice(0, 20)}`);
+  }
+  return value;
+}
+
 async function json<T>(res: Response): Promise<T> {
   const text = await res.text();
   try {
@@ -193,8 +215,9 @@ export type AccountState =
 
 /** `GET v2/login/action/check-account` — does this number have a usable MyID account? */
 export async function checkAccount(phone: string): Promise<AccountState> {
-  const url = `${AUTH_BASE}v2/login/action/check-account?phoneNumber=${encodeURIComponent(phone)}`;
-  const res = await fetchWithTimeout(url, { method: "GET", headers: headers() });
+  const url = new URL(`${AUTH_BASE}v2/login/action/check-account`);
+  url.searchParams.set("phoneNumber", requireDigits("phone", phone));
+  const res = await fetchWithTimeout(url.toString(), { method: "GET", headers: headers() });
   const text = await res.text();
 
   let data: ApiResult<{ id?: string; myid?: string; verify?: boolean }> | null = null;
@@ -286,8 +309,9 @@ export async function confirmRegister(
 
 /** Step 1 of OTP login: ask Mytel to SMS a 6-digit OTP to the SIM. */
 export async function requestLoginOtp(phone: string): Promise<ApiResult> {
-  const url = `${AUTH_BASE}login/method/otp/get-otp?phoneNumber=${encodeURIComponent(phone)}`;
-  const res = await fetchWithTimeout(url, { method: "GET", headers: headers() });
+  const url = new URL(`${AUTH_BASE}login/method/otp/get-otp`);
+  url.searchParams.set("phoneNumber", requireDigits("phone", phone));
+  const res = await fetchWithTimeout(url.toString(), { method: "GET", headers: headers() });
   return json<ApiResult>(res);
 }
 
@@ -364,10 +388,10 @@ export async function getBalance(
   token: string,
   msisdn: string
 ): Promise<BalanceInfo | null> {
-  const url = `${API_BASE}/account-detail/api/v1.2/individual/account-main?isdn=${encodeURIComponent(
-    msisdn
-  )}&language=EN`;
-  const res = await fetchWithTimeout(url, { headers: headers(token) });
+  const url = new URL(`${API_BASE}/account-detail/api/v1.2/individual/account-main`);
+  url.searchParams.set("isdn", requireDigits("msisdn", msisdn));
+  url.searchParams.set("language", "EN");
+  const res = await fetchWithTimeout(url.toString(), { headers: headers(token) });
   const data = await json<ApiResult<unknown>>(res);
   if (data.errorCode !== 0) return null;
   // Response shape: result: [ { msisdn, subId, mainBalance: { main: { amount } } } ]
