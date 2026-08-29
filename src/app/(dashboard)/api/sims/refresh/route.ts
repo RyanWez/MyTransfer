@@ -7,7 +7,7 @@ import { getValidToken } from "@/lib/tokens";
 export async function POST(req: NextRequest) {
   try {
     const { phone } = await req.json();
-    if (!phone) return NextResponse.json({ ok: false }, { status: 400 });
+    if (!phone) return NextResponse.json({ ok: false, error: "phone required" }, { status: 400 });
 
     const msisdn = normalizeMsisdn(phone);
     // Same shape check the OTP route applies. This value ends up in a Mytel

@@ -19,7 +19,8 @@ export async function DELETE(req: NextRequest) {
   if (phone) targets.push(phone);
   if (Array.isArray(phones)) targets.push(...phones);
 
-  if (targets.length === 0) return NextResponse.json({ ok: false }, { status: 400 });
+  if (targets.length === 0)
+    return NextResponse.json({ ok: false, error: "phone or phones required" }, { status: 400 });
 
   // One transaction and one live push for the whole batch — clearing out drained
   // SIMs would otherwise wake every open tab once per row.
